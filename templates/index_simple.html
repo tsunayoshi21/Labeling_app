@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Corrector de Transcripciones OCR</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .btn {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .btn-correct { background: #28a745; color: white; }
+        .btn-edit { background: #ffc107; color: black; }
+        .btn-discard { background: #dc3545; color: white; }
+        .image-container {
+            text-align: center;
+            margin: 20px 0;
+            padding: 20px;
+            border: 2px dashed #ccc;
+            border-radius: 10px;
+        }
+        .transcription {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            font-family: monospace;
+            font-size: 18px;
+        }
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            margin: 20px 0;
+            padding: 15px;
+            background: #e9ecef;
+            border-radius: 5px;
+        }
+        .hidden { display: none; }
+        .loading {
+            text-align: center;
+            padding: 50px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Corrector de Transcripciones OCR</h1>
+        
+        <div class="stats">
+            <div><strong>Total:</strong> <span id="totalImages">-</span></div>
+            <div><strong>Revisadas:</strong> <span id="reviewedImages">-</span></div>
+            <div><strong>Restantes:</strong> <span id="remainingImages">-</span></div>
+            <div><strong>Error:</strong> <span id="errorRate">0%</span></div>
+        </div>
+
+        <div id="loadingDiv" class="loading">
+            <p>Cargando...</p>
+        </div>
+
+        <div id="workArea" class="hidden">
+            <button id="saveBtn" class="btn" style="background: #28a745; color: white; width: 100%; margin-bottom: 20px;">
+                💾 Guardar Progreso
+            </button>
+            <div id="saveMessage" style="display: none; padding: 10px; margin: 10px 0; background: #d4edda; border-radius: 5px;"></div>
+
+            <div class="image-container">
+                <img id="currentImage" class="hidden" style="max-width: 100%; max-height: 300px;" alt="Imagen actual">
+                <div id="noImageMessage" class="hidden">
+                    <h3>⚠️ Imagen no encontrada</h3>
+                </div>
+            </div>
+
+            <div class="transcription">
+                <strong>Transcripción:</strong><br>
+                <div id="transcriptionDisplay" style="margin-top: 10px;"></div>
+                <input type="text" id="editInput" class="hidden" style="width: 100%; padding: 10px; margin-top: 10px;" placeholder="Ingresa la transcripción correcta...">
+            </div>
+
+            <div style="text-align: center;">
+                <button id="correctBtn" class="btn btn-correct">✓ Correcta</button>
+                <button id="editBtn" class="btn btn-edit">✏️ Editar</button>
+                <button id="discardBtn" class="btn btn-discard">🗑️ Descartar</button>
+                <button id="saveEditBtn" class="btn hidden" style="background: #007bff; color: white;">💾 Guardar</button>
+                <button id="cancelBtn" class="btn hidden" style="background: #6c757d; color: white;">✖️ Cancelar</button>
+            </div>
+        </div>
+
+        <div id="completionDiv" class="hidden">
+            <h2>🎉 ¡Completado!</h2>
+            <p>Has revisado todas las imágenes.</p>
+        </div>
+    </div>
+
+    <script>
+        let currentImageData = null;
+        let isEditMode = false;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Página cargada, inicializando...');
+            loadCurrentImage();
+            updateStats();
+            
+            document.getElementById('correctBtn').addEventListener('click', () => submitAction('correct'));
+            document.getElementById('editBtn').addEventListener('click', toggleEditMode);
+            document.getElementById('discardBtn').addEventListener('click', () => submitAction('discard'));
+            document.getElementById('saveEditBtn').addEventListener('click', saveEdit);
+            document.getElementById('cancelBtn').addEventListener('click', cancelEdit);
+            document.getElementById('saveBtn').addEventListener('click', manualSaveProgress);
+        });
+
+        async function loadCurrentImage() {
+            try {
+                console.log('Cargando imagen actual...');
+                showLoading(true);
+                const response = await fetch('/api/current_image');
+                const data = await response.json();
+                console.log('Datos recibidos:', data);
+                
+                if (data.finished) {
+                    showCompletion();
+                    return;
+                }
+                
+                currentImageData = data;
+                updateUI();
+                showLoading(false);
+                
+            } catch (error) {
+                console.error('Error loading image:', error);
+                document.getElementById('loadingDiv').innerHTML = '<p style="color: red;">Error al cargar la imagen: ' + error.message + '</p>';
+            }
+        }
+
+        function updateUI() {
+            console.log('Actualizando UI...');
+            if (!currentImageData) return;
+            
+            const imageElement = document.getElementById('currentImage');
+            const noImageMessage = document.getElementById('noImageMessage');
+            
+            if (currentImageData.image_exists) {
+                imageElement.src = `/images/${currentImageData.image_filename}`;
+                imageElement.classList.remove('hidden');
+                noImageMessage.classList.add('hidden');
+            } else {
+                imageElement.classList.add('hidden');
+                noImageMessage.classList.remove('hidden');
+            }
+            
+            document.getElementById('transcriptionDisplay').textContent = currentImageData.transcription;
+        }
+
+        async function updateStats() {
+            try {
+                const response = await fetch('/api/stats');
+                const stats = await response.json();
+                
+                document.getElementById('totalImages').textContent = stats.total_original;
+                document.getElementById('reviewedImages').textContent = stats.reviewed;
+                document.getElementById('remainingImages').textContent = stats.remaining;
+                document.getElementById('errorRate').textContent = `${stats.error_rate}%`;
+                
+            } catch (error) {
+                console.error('Error updating stats:', error);
+            }
+        }
+
+        async function submitAction(action) {
+            if (!currentImageData) return;
+            
+            try {
+                const payload = {
+                    action: action,
+                    image_key: currentImageData.image_key
+                };
+                
+                const response = await fetch('/api/submit_correction', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    await loadCurrentImage();
+                    await updateStats();
+                }
+                
+            } catch (error) {
+                console.error('Error submitting action:', error);
+            }
+        }
+
+        function toggleEditMode() {
+            isEditMode = true;
+            document.getElementById('transcriptionDisplay').classList.add('hidden');
+            document.getElementById('editInput').classList.remove('hidden');
+            document.getElementById('editInput').value = currentImageData.transcription;
+            document.getElementById('editInput').focus();
+            
+            document.getElementById('correctBtn').classList.add('hidden');
+            document.getElementById('editBtn').classList.add('hidden');
+            document.getElementById('discardBtn').classList.add('hidden');
+            document.getElementById('saveEditBtn').classList.remove('hidden');
+            document.getElementById('cancelBtn').classList.remove('hidden');
+        }
+
+        async function saveEdit() {
+            const newTranscription = document.getElementById('editInput').value.trim();
+            if (!newTranscription) return;
+            
+            try {
+                const payload = {
+                    action: 'edit',
+                    image_key: currentImageData.image_key,
+                    new_transcription: newTranscription
+                };
+                
+                const response = await fetch('/api/submit_correction', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    cancelEdit();
+                    await loadCurrentImage();
+                    await updateStats();
+                }
+                
+            } catch (error) {
+                console.error('Error saving edit:', error);
+            }
+        }
+
+        function cancelEdit() {
+            isEditMode = false;
+            document.getElementById('transcriptionDisplay').classList.remove('hidden');
+            document.getElementById('editInput').classList.add('hidden');
+            
+            document.getElementById('correctBtn').classList.remove('hidden');
+            document.getElementById('editBtn').classList.remove('hidden');
+            document.getElementById('discardBtn').classList.remove('hidden');
+            document.getElementById('saveEditBtn').classList.add('hidden');
+            document.getElementById('cancelBtn').classList.add('hidden');
+        }
+
+        async function manualSaveProgress() {
+            try {
+                const saveBtn = document.getElementById('saveBtn');
+                const originalText = saveBtn.innerHTML;
+                saveBtn.innerHTML = '⏳ Guardando...';
+                saveBtn.disabled = true;
+                
+                const response = await fetch('/api/save_progress', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const result = await response.json();
+                
+                saveBtn.innerHTML = originalText;
+                saveBtn.disabled = false;
+                
+                if (result.success) {
+                    showSaveMessage(`✅ ${result.message} (${result.timestamp})`);
+                } else {
+                    showSaveMessage(`❌ ${result.error}`);
+                }
+                
+            } catch (error) {
+                console.error('Error saving progress:', error);
+                showSaveMessage('❌ Error al guardar el progreso');
+            }
+        }
+
+        function showSaveMessage(message) {
+            const saveMessage = document.getElementById('saveMessage');
+            saveMessage.textContent = message;
+            saveMessage.style.display = 'block';
+            
+            setTimeout(() => {
+                saveMessage.style.display = 'none';
+            }, 3000);
+        }
+
+        function showLoading(show) {
+            const loadingDiv = document.getElementById('loadingDiv');
+            const workArea = document.getElementById('workArea');
+            
+            if (show) {
+                loadingDiv.classList.remove('hidden');
+                workArea.classList.add('hidden');
+            } else {
+                loadingDiv.classList.add('hidden');
+                workArea.classList.remove('hidden');
+            }
+        }
+
+        function showCompletion() {
+            document.getElementById('workArea').classList.add('hidden');
+            document.getElementById('completionDiv').classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>

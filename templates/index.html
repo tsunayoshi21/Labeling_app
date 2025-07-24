@@ -1,0 +1,1212 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Corrector de Transcripciones OCR</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            margin: 0;
+            padding: 15px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 25px;
+            max-width: 1200px;
+            width: 100%;
+            margin: 0 auto;
+            min-height: calc(100vh - 30px);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 15px;
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 2em;
+            margin-bottom: 5px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .progress-container {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 10px;
+            margin-bottom: 15px;
+        }
+
+        .progress-bar {
+            background: #e9ecef;
+            border-radius: 10px;
+            height: 20px;
+            margin-bottom: 10px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            background: linear-gradient(45deg, #28a745, #20c997);
+            height: 100%;
+            border-radius: 10px;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+            text-align: center;
+        }
+
+        .stat {
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            border: 2px solid #e9ecef;
+        }
+
+        .stat-number {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .error-metrics {
+            margin-top: 15px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+        }
+
+        .metric-item {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 0.9em;
+        }
+
+        .metric-label {
+            font-size: 0.8em;
+            opacity: 0.9;
+            margin-bottom: 2px;
+        }
+
+        .metric-value {
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+
+        .save-container {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: center;
+            border: 2px solid #e9ecef;
+        }
+
+        .save-message {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            border-radius: 8px;
+            padding: 10px;
+            margin-top: 10px;
+            font-size: 0.9em;
+            display: none;
+        }
+
+        .save-message.show {
+            display: block;
+            animation: fadeInOut 3s ease-in-out;
+        }
+
+        .save-message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border-color: #f5c6cb;
+        }
+
+        .save-message.success {
+            background: #d4edda;
+            color: #155724;
+            border-color: #c3e6cb;
+        }
+
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translateY(-10px); }
+            15% { opacity: 1; transform: translateY(0); }
+            85% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-10px); }
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .image-container {
+            text-align: center;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 400px;
+            width: 100%;
+        }
+
+        .current-image {
+            max-width: 100%;
+            max-height: 70vh;
+            border: 3px solid #e9ecef;
+            border-radius: 10px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+            object-fit: contain;
+        }
+
+        .current-image {
+            max-width: 100%;
+            max-height: 60vh;
+            border: 3px solid #e9ecef;
+            border-radius: 10px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+            object-fit: contain;
+        }
+
+        /* Para imágenes muy pequeñas, permitir zoom */
+        .current-image.small-image {
+            min-width: 300px;
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+
+        .transcription-container {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            width: 100%;
+        }
+
+        .transcription-label {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+
+        .transcription-text {
+            background: white;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            font-size: 1.2em;
+            font-family: 'Courier New', monospace;
+            color: #333;
+            min-height: 50px;
+            display: flex;
+            align-items: center;
+        }
+
+        .edit-input {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            font-size: 1.2em;
+            font-family: 'Courier New', monospace;
+            outline: none;
+            transition: border-color 0.3s ease;
+        }
+
+        .edit-input:focus {
+            border-color: #764ba2;
+            box-shadow: 0 0 10px rgba(102, 126, 234, 0.3);
+        }
+
+        .actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-bottom: 15px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-width: 120px;
+            position: relative;
+        }
+
+        .btn .hotkey {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            font-size: 0.8em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+
+        .btn-correct {
+            background: linear-gradient(45deg, #28a745, #20c997);
+            color: white;
+        }
+
+        .btn-edit {
+            background: linear-gradient(45deg, #ffc107, #fd7e14);
+            color: white;
+        }
+
+        .btn-discard {
+            background: linear-gradient(45deg, #dc3545, #e83e8c);
+            color: white;
+        }
+
+        .btn-save {
+            background: linear-gradient(45deg, #007bff, #6610f2);
+            color: white;
+        }
+
+        .btn-cancel {
+            background: linear-gradient(45deg, #6c757d, #495057);
+            color: white;
+        }
+
+        .navigation {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .nav-input {
+            padding: 8px 12px;
+            border: 2px solid #e9ecef;
+            border-radius: 6px;
+            width: 80px;
+            text-align: center;
+        }
+
+        .completion-message {
+            text-align: center;
+            padding: 40px;
+            background: linear-gradient(45deg, #28a745, #20c997);
+            color: white;
+            border-radius: 15px;
+            margin: 20px 0;
+        }
+
+        .completion-message h2 {
+            font-size: 2em;
+            margin-bottom: 15px;
+        }
+
+        .file-path {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            word-break: break-all;
+            margin-top: 15px;
+        }
+
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .error {
+            color: #dc3545;
+            text-align: center;
+            padding: 20px;
+            background: #f8d7da;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+
+        .hotkeys-help {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 30px;
+            border: 2px solid #e9ecef;
+        }
+
+        .hotkeys-help h4 {
+            color: #333;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .hotkeys-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+        }
+
+        .hotkeys-container {
+            display: flex;
+            gap: 20px;
+            justify-content: space-between;
+        }
+
+        .hotkeys-column {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .hotkey-item {
+            background: white;
+            padding: 6px 8px;
+            border-radius: 6px;
+            text-align: center;
+            font-size: 0.8em;
+            border: 1px solid #dee2e6;
+            margin-bottom: 5px;
+        }
+
+        kbd {
+            background: #333;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.85em;
+            font-weight: bold;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        /* Layout principal optimizado */
+        .main-work-area {
+            display: flex;
+            gap: 15px;
+            margin-top: 10px;
+            align-items: flex-start;
+            flex: 1;
+            justify-content: center;
+            position: relative;
+        }
+
+        .central-area {
+            flex: 0 1 800px;
+            max-width: 800px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .compact-save {
+            align-self: flex-end;
+            margin-bottom: 10px;
+        }
+
+        .btn-save-compact {
+            background: linear-gradient(45deg, #28a745, #20c997);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 0.9em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-save-compact:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        .hotkeys-lateral {
+            width: 120px;
+            background: rgba(248, 249, 250, 0.8);
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 10px;
+            position: sticky;
+            top: 20px;
+            backdrop-filter: blur(5px);
+        }
+
+        .hotkeys-lateral h6 {
+            color: #333;
+            margin: 0 0 8px 0;
+            text-align: center;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+
+        .hotkey-compact {
+            background: white;
+            padding: 4px 6px;
+            border-radius: 4px;
+            text-align: center;
+            font-size: 0.7em;
+            border: 1px solid #dee2e6;
+            margin-bottom: 4px;
+            line-height: 1.2;
+        }
+
+        .left-hotkeys {
+            order: 1;
+        }
+
+        .central-area {
+            order: 2;
+        }
+
+        .right-hotkeys {
+            order: 3;
+        }
+
+        .btn-nav {
+            background: linear-gradient(45deg, #6c757d, #495057);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 0.9em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-nav:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        /* Responsive */
+        @media (max-width: 1100px) {
+            .hotkeys-lateral {
+                display: none;
+            }
+            
+            .central-area {
+                flex: 1;
+                max-width: none;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+                margin: 5px;
+            }
+            
+            .header h1 {
+                font-size: 1.8em;
+            }
+            
+            .actions {
+                flex-direction: column;
+                align-items: center;
+                gap: 8px;
+            }
+            
+            .btn {
+                width: 100%;
+                max-width: 250px;
+            }
+            
+            .navigation {
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+
+            .main-work-area {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .compact-save {
+                align-self: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Corrector de Transcripciones OCR</h1>
+        </div>
+
+        <div class="progress-container">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressBar" style="width: 0%;">0%</div>
+            </div>
+            <div class="stats">
+                <div class="stat">
+                    <div class="stat-number" id="totalImages">-</div>
+                    <div class="stat-label">Total</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number" id="reviewedImages">-</div>
+                    <div class="stat-label">Revisadas</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number" id="remainingImages">-</div>
+                    <div class="stat-label">Restantes</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number" id="correctImages">-</div>
+                    <div class="stat-label">Correctas</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number" id="editedImages">-</div>
+                    <div class="stat-label">Editadas</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number" id="discardedImages">-</div>
+                    <div class="stat-label">Descartadas</div>
+                </div>
+            </div>
+            
+            <!-- Métricas de Error -->
+            <div class="error-metrics">
+                <div class="metric-item">
+                    <div class="metric-label">Tasa de Error Total:</div>
+                    <div class="metric-value" id="errorRate">0%</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-label">Editadas:</div>
+                    <div class="metric-value" id="editRate">0%</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-label">Descartadas:</div>
+                    <div class="metric-value" id="discardRate">0%</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div id="loadingDiv" class="loading">
+                <div class="spinner"></div>
+            </div>
+
+            <div id="workArea" class="hidden">
+                <!-- Layout principal optimizado -->
+                <div class="main-work-area">
+                    <!-- Área central con imagen y controles -->
+                    <div class="central-area">
+                        <!-- Botón de guardado más pequeño y arriba -->
+                        <div class="compact-save">
+                            <button id="saveBtn" class="btn-save-compact">💾 Guardar</button>
+                            <div id="saveMessage" class="save-message"></div>
+                        </div>
+
+                        <!-- Imagen -->
+                        <div class="image-container">
+                            <img id="currentImage" class="current-image hidden" alt="Imagen actual">
+                            <div id="noImageMessage" class="hidden">
+                                <h3>⚠️ Imagen no encontrada</h3>
+                                <p>La imagen no existe en la carpeta especificada</p>
+                            </div>
+                        </div>
+
+                        <!-- Transcripción -->
+                        <div class="transcription-container">
+                            <div class="transcription-label">Transcripción actual:</div>
+                            <div id="transcriptionDisplay" class="transcription-text"></div>
+                            <input type="text" id="editInput" class="edit-input hidden" placeholder="Ingresa la transcripción correcta...">
+                        </div>
+
+                        <!-- Acciones principales -->
+                        <div class="actions">
+                            <button id="correctBtn" class="btn btn-correct">
+                                ✓ Correcta <span class="hotkey">1</span>
+                            </button>
+                            <button id="editBtn" class="btn btn-edit">
+                                ✏️ Editar <span class="hotkey">2</span>
+                            </button>
+                            <button id="discardBtn" class="btn btn-discard">
+                                🗑️ Descartar <span class="hotkey">3</span>
+                            </button>
+                            <button id="saveEditBtn" class="btn btn-save hidden">💾 Guardar</button>
+                            <button id="cancelBtn" class="btn btn-cancel hidden">✖️ Cancelar</button>
+                        </div>
+
+                        <!-- Navegación -->
+                        <div class="navigation">
+                            <button id="prevBtn" class="btn-nav">← Anterior</button>
+                            <span>Ir a imagen:</span>
+                            <input type="number" id="navInput" class="nav-input" min="1" placeholder="1">
+                            <button id="navBtn" class="btn-nav">Ir</button>
+                        </div>
+                    </div>
+
+                    <!-- Hotkeys en los laterales - más compactos -->
+                    <div class="hotkeys-lateral left-hotkeys">
+                        <h6>⌨️ Acciones</h6>
+                        <div class="hotkey-compact"><kbd>1</kbd> / <kbd>Espacio</kbd><br>Correcta</div>
+                        <div class="hotkey-compact"><kbd>2</kbd> / <kbd>E</kbd><br>Editar</div>
+                        <div class="hotkey-compact"><kbd>3</kbd> / <kbd>Del</kbd><br>Descartar</div>
+                        <div class="hotkey-compact"><kbd>←</kbd><br>Anterior</div>
+                    </div>
+
+                    <div class="hotkeys-lateral right-hotkeys">
+                        <h6>⌨️ Extras</h6>
+                        <div class="hotkey-compact"><kbd>Ctrl+S</kbd><br>Guardar</div>
+                        <div class="hotkey-compact"><kbd>Enter</kbd><br>Confirmar</div>
+                        <div class="hotkey-compact"><kbd>Esc</kbd><br>Cancelar</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="completionDiv" class="hidden">
+                <div class="completion-message">
+                    <h2>🎉 ¡Completado!</h2>
+                    <p>Has revisado todas las imágenes exitosamente.</p>
+                    <div class="file-path">
+                        <strong>Archivo de correcciones guardado en:</strong><br>
+                        <span id="correctedFilePath"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="errorDiv" class="error hidden"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentImageData = null;
+        let isEditMode = false;
+
+        // Cargar imagen actual al iniciar
+        document.addEventListener('DOMContentLoaded', function() {
+            loadCurrentImage();
+            updateStats();
+            
+            // Event listeners
+            document.getElementById('correctBtn').addEventListener('click', () => submitAction('correct'));
+            document.getElementById('editBtn').addEventListener('click', toggleEditMode);
+            document.getElementById('discardBtn').addEventListener('click', () => submitAction('discard'));
+            document.getElementById('saveEditBtn').addEventListener('click', saveEdit);
+            document.getElementById('cancelBtn').addEventListener('click', cancelEdit);
+            document.getElementById('navBtn').addEventListener('click', navigateToImage);
+            document.getElementById('prevBtn').addEventListener('click', goToPreviousImage);
+            document.getElementById('saveBtn').addEventListener('click', manualSaveProgress);
+            
+            // Enter key en input de edición
+            document.getElementById('editInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    saveEdit();
+                }
+            });
+            
+            // Enter key en navegación
+            document.getElementById('navInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    navigateToImage();
+                }
+            });
+
+            // Keyboard shortcuts
+            document.addEventListener('keydown', function(e) {
+                if (isEditMode) {
+                    // En modo edición, solo Enter para guardar y Escape para cancelar
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        saveEdit();
+                    } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        cancelEdit();
+                    }
+                    return;
+                }
+                
+                // Hotkeys principales
+                switch(e.key) {
+                    case '1':
+                        e.preventDefault();
+                        highlightButton('correctBtn');
+                        submitAction('correct');
+                        break;
+                    case '2':
+                        e.preventDefault();
+                        highlightButton('editBtn');
+                        toggleEditMode();
+                        break;
+                    case '3':
+                        e.preventDefault();
+                        highlightButton('discardBtn');
+                        submitAction('discard');
+                        break;
+                    case 'ArrowRight':
+                    case ' ': // Espacio también para "correcta"
+                        e.preventDefault();
+                        highlightButton('correctBtn');
+                        submitAction('correct');
+                        break;
+                    case 'ArrowLeft': // Flecha izquierda para retroceder
+                        e.preventDefault();
+                        goToPreviousImage();
+                        break;
+                    case 'Delete':
+                    case 'Backspace':
+                        e.preventDefault();
+                        highlightButton('discardBtn');
+                        submitAction('discard');
+                        break;
+                    case 'e':
+                    case 'E':
+                        e.preventDefault();
+                        highlightButton('editBtn');
+                        toggleEditMode();
+                        break;
+                    case 's':
+                    case 'S':
+                        if (e.ctrlKey) {
+                            e.preventDefault();
+                            manualSaveProgress();
+                        }
+                        break;
+                }
+            });
+        });
+
+        async function loadCurrentImage() {
+            try {
+                showLoading(true);
+                const response = await fetch('/api/current_image');
+                const data = await response.json();
+                
+                if (data.finished) {
+                    showCompletion(data.corrected_file);
+                    return;
+                }
+                
+                currentImageData = data;
+                updateUI();
+                showLoading(false);
+                
+                // Mantener el scroll en la posición actual para evitar saltos
+                window.scrollTo(0, 0);
+                
+            } catch (error) {
+                console.error('Error loading image:', error);
+                showError('Error al cargar la imagen');
+                showLoading(false);
+            }
+        }
+
+        function updateUI() {
+            if (!currentImageData) return;
+            
+            const imageElement = document.getElementById('currentImage');
+            const noImageMessage = document.getElementById('noImageMessage');
+            
+            if (currentImageData.image_exists) {
+                imageElement.src = `/images/${currentImageData.image_filename}`;
+                imageElement.classList.remove('hidden');
+                noImageMessage.classList.add('hidden');
+                
+                // Detectar si la imagen es pequeña y aplicar clase especial
+                imageElement.onload = function() {
+                    if (this.naturalWidth < 200 || this.naturalHeight < 100) {
+                        this.classList.add('small-image');
+                        // Para imágenes muy pequeñas, establecer un tamaño mínimo
+                        this.style.minWidth = '400px';
+                    } else {
+                        this.classList.remove('small-image');
+                        this.style.minWidth = '';
+                    }
+                };
+            } else {
+                imageElement.classList.add('hidden');
+                noImageMessage.classList.remove('hidden');
+            }
+            
+            document.getElementById('transcriptionDisplay').textContent = currentImageData.transcription;
+            
+            // Update progress
+            const progressBar = document.getElementById('progressBar');
+            const progress = currentImageData.progress;
+            progressBar.style.width = `${progress}%`;
+            progressBar.textContent = `${progress}%`;
+            
+            // Update navigation input
+            document.getElementById('navInput').max = currentImageData.total;
+            document.getElementById('navInput').value = currentImageData.current_index + 1;
+            
+            // Update previous button state
+            const prevBtn = document.getElementById('prevBtn');
+            if (currentImageData.current_index <= 0) {
+                prevBtn.disabled = true;
+                prevBtn.style.opacity = '0.5';
+                prevBtn.style.cursor = 'not-allowed';
+            } else {
+                prevBtn.disabled = false;
+                prevBtn.style.opacity = '1';
+                prevBtn.style.cursor = 'pointer';
+            }
+        }
+
+        async function updateStats() {
+            try {
+                const response = await fetch('/api/stats');
+                const stats = await response.json();
+                
+                document.getElementById('totalImages').textContent = stats.total_original;
+                document.getElementById('reviewedImages').textContent = stats.reviewed;
+                document.getElementById('remainingImages').textContent = stats.remaining;
+                document.getElementById('correctImages').textContent = stats.correct;
+                document.getElementById('editedImages').textContent = stats.edited;
+                document.getElementById('discardedImages').textContent = stats.discarded;
+                
+                // Actualizar métricas de error
+                document.getElementById('errorRate').textContent = `${stats.error_rate}%`;
+                document.getElementById('editRate').textContent = `${stats.edit_rate}%`;
+                document.getElementById('discardRate').textContent = `${stats.discard_rate}%`;
+                
+            } catch (error) {
+                console.error('Error updating stats:', error);
+            }
+        }
+
+        async function submitAction(action) {
+            if (!currentImageData) return;
+            
+            try {
+                const payload = {
+                    action: action,
+                    image_key: currentImageData.image_key
+                };
+                
+                const response = await fetch('/api/submit_correction', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    await loadCurrentImage();
+                    await updateStats();
+                } else {
+                    showError(result.error || 'Error al procesar la acción');
+                }
+                
+            } catch (error) {
+                console.error('Error submitting action:', error);
+                showError('Error al enviar la acción');
+            }
+        }
+
+        function toggleEditMode() {
+            isEditMode = true;
+            const transcriptionDisplay = document.getElementById('transcriptionDisplay');
+            const editInput = document.getElementById('editInput');
+            const correctBtn = document.getElementById('correctBtn');
+            const editBtn = document.getElementById('editBtn');
+            const discardBtn = document.getElementById('discardBtn');
+            const saveEditBtn = document.getElementById('saveEditBtn');
+            const cancelBtn = document.getElementById('cancelBtn');
+            
+            transcriptionDisplay.classList.add('hidden');
+            editInput.classList.remove('hidden');
+            editInput.value = currentImageData.transcription;
+            editInput.focus();
+            editInput.select();
+            
+            correctBtn.classList.add('hidden');
+            editBtn.classList.add('hidden');
+            discardBtn.classList.add('hidden');
+            saveEditBtn.classList.remove('hidden');
+            cancelBtn.classList.remove('hidden');
+        }
+
+        async function saveEdit() {
+            const newTranscription = document.getElementById('editInput').value.trim();
+            
+            if (!newTranscription) {
+                showError('La transcripción no puede estar vacía');
+                return;
+            }
+            
+            try {
+                const payload = {
+                    action: 'edit',
+                    image_key: currentImageData.image_key,
+                    new_transcription: newTranscription
+                };
+                
+                const response = await fetch('/api/submit_correction', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    cancelEdit();
+                    await loadCurrentImage();
+                    await updateStats();
+                } else {
+                    showError(result.error || 'Error al guardar la edición');
+                }
+                
+            } catch (error) {
+                console.error('Error saving edit:', error);
+                showError('Error al guardar la edición');
+            }
+        }
+
+        function cancelEdit() {
+            isEditMode = false;
+            const transcriptionDisplay = document.getElementById('transcriptionDisplay');
+            const editInput = document.getElementById('editInput');
+            const correctBtn = document.getElementById('correctBtn');
+            const editBtn = document.getElementById('editBtn');
+            const discardBtn = document.getElementById('discardBtn');
+            const saveEditBtn = document.getElementById('saveEditBtn');
+            const cancelBtn = document.getElementById('cancelBtn');
+            
+            transcriptionDisplay.classList.remove('hidden');
+            editInput.classList.add('hidden');
+            
+            correctBtn.classList.remove('hidden');
+            editBtn.classList.remove('hidden');
+            discardBtn.classList.remove('hidden');
+            saveEditBtn.classList.add('hidden');
+            cancelBtn.classList.add('hidden');
+        }
+
+        async function navigateToImage() {
+            const navInput = document.getElementById('navInput');
+            const targetIndex = parseInt(navInput.value) - 1; // Convert to 0-based index
+            
+            if (isNaN(targetIndex) || targetIndex < 0) {
+                showError('Índice inválido');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/go_to_index', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ index: targetIndex })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    await loadCurrentImage();
+                    await updateStats();
+                } else {
+                    showError(result.error || 'Error al navegar');
+                }
+                
+            } catch (error) {
+                console.error('Error navigating:', error);
+                showError('Error al navegar');
+            }
+        }
+
+        async function goToPreviousImage() {
+            if (!currentImageData || currentImageData.current_index <= 0) {
+                showError('Ya estás en la primera imagen');
+                return;
+            }
+            
+            const targetIndex = currentImageData.current_index - 1;
+            
+            try {
+                const response = await fetch('/api/go_to_index', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ index: targetIndex })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    await loadCurrentImage();
+                    await updateStats();
+                } else {
+                    showError(result.error || 'Error al retroceder');
+                }
+                
+            } catch (error) {
+                console.error('Error going to previous image:', error);
+                showError('Error al retroceder');
+            }
+        }
+
+        function showLoading(show) {
+            const loadingDiv = document.getElementById('loadingDiv');
+            const workArea = document.getElementById('workArea');
+            
+            if (show) {
+                loadingDiv.classList.remove('hidden');
+                workArea.classList.add('hidden');
+            } else {
+                loadingDiv.classList.add('hidden');
+                workArea.classList.remove('hidden');
+            }
+        }
+
+        function showCompletion(correctedFilePath) {
+            document.getElementById('workArea').classList.add('hidden');
+            document.getElementById('completionDiv').classList.remove('hidden');
+            document.getElementById('correctedFilePath').textContent = correctedFilePath;
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('errorDiv');
+            errorDiv.textContent = message;
+            errorDiv.classList.remove('hidden');
+            
+            setTimeout(() => {
+                errorDiv.classList.add('hidden');
+            }, 5000);
+        }
+
+        async function manualSaveProgress() {
+            try {
+                // Mostrar botón como cargando
+                const saveBtn = document.getElementById('saveBtn');
+                const originalText = saveBtn.innerHTML;
+                saveBtn.innerHTML = '⏳ Guardando...';
+                saveBtn.disabled = true;
+                
+                const response = await fetch('/api/save_progress', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const result = await response.json();
+                
+                // Restaurar botón
+                saveBtn.innerHTML = originalText;
+                saveBtn.disabled = false;
+                
+                if (result.success) {
+                    showSaveMessage(`✅ ${result.message} (${result.timestamp})`, 'success');
+                } else {
+                    showSaveMessage(`❌ ${result.error}`, 'error');
+                }
+                
+            } catch (error) {
+                console.error('Error saving progress:', error);
+                const saveBtn = document.getElementById('saveBtn');
+                saveBtn.innerHTML = '💾 Guardar Progreso';
+                saveBtn.disabled = false;
+                showSaveMessage('❌ Error al guardar el progreso', 'error');
+            }
+        }
+
+        function showSaveMessage(message, type = 'success') {
+            const saveMessage = document.getElementById('saveMessage');
+            saveMessage.textContent = message;
+            saveMessage.className = `save-message show ${type}`;
+            
+            // Auto-hide after 3 seconds
+            setTimeout(() => {
+                saveMessage.classList.remove('show');
+            }, 3000);
+        }
+
+        function highlightButton(buttonId) {
+            const button = document.getElementById(buttonId);
+            if (!button || button.classList.contains('hidden')) return;
+            
+            // Agregar efecto de highlight
+            button.style.transform = 'scale(1.1)';
+            button.style.boxShadow = '0 0 20px rgba(255,255,255,0.8)';
+            
+            // Remover el efecto después de 200ms
+            setTimeout(() => {
+                button.style.transform = '';
+                button.style.boxShadow = '';
+            }, 200);
+        }
+    </script>
+</body>
+</html>
