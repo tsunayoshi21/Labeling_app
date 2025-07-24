@@ -40,7 +40,6 @@ instance/
 .webassets-cache
 
 # Data files (opcional - puedes comentar si quieres incluir los datos)
-*.json
 *.pkl
 
 # Logs
