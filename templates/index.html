@@ -93,11 +93,41 @@
             font-size: 1.5em;
             font-weight: bold;
             color: #667eea;
+            transition: all 0.3s ease;
         }
 
         .stat-label {
             font-size: 0.9em;
             color: #666;
+        }
+
+        /* Efecto de highlight para cambios en estadísticas */
+        .stat.highlight {
+            animation: statsHighlight 0.8s ease-in-out;
+            transform: scale(1.05);
+        }
+
+        @keyframes statsHighlight {
+            0% { 
+                background: white;
+                border-color: #e9ecef;
+                transform: scale(1);
+            }
+            50% { 
+                background: linear-gradient(45deg, #28a745, #20c997);
+                border-color: #28a745;
+                color: white;
+                transform: scale(1.08);
+            }
+            100% { 
+                background: white;
+                border-color: #e9ecef;
+                transform: scale(1);
+            }
+        }
+
+        .stat.highlight .stat-number {
+            color: inherit;
         }
 
         .error-metrics {
@@ -472,8 +502,9 @@
         }
 
         .compact-save {
-            align-self: flex-end;
-            margin-bottom: 10px;
+            text-align: center;
+            margin-bottom: 15px;
+            width: 100%;
         }
 
         .btn-save-compact {
@@ -493,33 +524,35 @@
         }
 
         .hotkeys-lateral {
-            width: 120px;
-            background: rgba(248, 249, 250, 0.8);
-            border: 1px solid #e9ecef;
-            border-radius: 8px;
-            padding: 10px;
+            width: 150px;
+            background: rgba(248, 249, 250, 0.9);
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            padding: 15px;
             position: sticky;
             top: 20px;
             backdrop-filter: blur(5px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
 
         .hotkeys-lateral h6 {
             color: #333;
-            margin: 0 0 8px 0;
+            margin: 0 0 12px 0;
             text-align: center;
-            font-size: 0.8em;
+            font-size: 0.95em;
             font-weight: bold;
         }
 
         .hotkey-compact {
             background: white;
-            padding: 4px 6px;
-            border-radius: 4px;
+            padding: 8px 10px;
+            border-radius: 6px;
             text-align: center;
-            font-size: 0.7em;
+            font-size: 0.85em;
             border: 1px solid #dee2e6;
-            margin-bottom: 4px;
-            line-height: 1.2;
+            margin-bottom: 8px;
+            line-height: 1.3;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
 
         .left-hotkeys {
@@ -663,12 +696,6 @@
                 <div class="main-work-area">
                     <!-- Área central con imagen y controles -->
                     <div class="central-area">
-                        <!-- Botón de guardado más pequeño y arriba -->
-                        <div class="compact-save">
-                            <button id="saveBtn" class="btn-save-compact">💾 Guardar</button>
-                            <div id="saveMessage" class="save-message"></div>
-                        </div>
-
                         <!-- Imagen -->
                         <div class="image-container">
                             <img id="currentImage" class="current-image hidden" alt="Imagen actual">
@@ -676,6 +703,12 @@
                                 <h3>⚠️ Imagen no encontrada</h3>
                                 <p>La imagen no existe en la carpeta especificada</p>
                             </div>
+                        </div>
+
+                        <!-- Botón de guardado debajo de la imagen -->
+                        <div class="compact-save">
+                            <button id="saveBtn" class="btn-save-compact">💾 Guardar</button>
+                            <div id="saveMessage" class="save-message"></div>
                         </div>
 
                         <!-- Transcripción -->
@@ -916,22 +949,66 @@
             }
         }
 
+        // Variable global para almacenar los valores anteriores de las estadísticas
+        let previousStats = {};
+
         async function updateStats() {
             try {
                 const response = await fetch('/api/stats');
                 const stats = await response.json();
                 
-                document.getElementById('totalImages').textContent = stats.total_original;
-                document.getElementById('reviewedImages').textContent = stats.reviewed;
-                document.getElementById('remainingImages').textContent = stats.remaining;
-                document.getElementById('correctImages').textContent = stats.correct;
-                document.getElementById('editedImages').textContent = stats.edited;
-                document.getElementById('discardedImages').textContent = stats.discarded;
+                // Lista de elementos a actualizar con sus IDs y valores
+                const statsToUpdate = [
+                    { id: 'totalImages', value: stats.total_original, key: 'total_original' },
+                    { id: 'reviewedImages', value: stats.reviewed, key: 'reviewed' },
+                    { id: 'remainingImages', value: stats.remaining, key: 'remaining' },
+                    { id: 'correctImages', value: stats.correct, key: 'correct' },
+                    { id: 'editedImages', value: stats.edited, key: 'edited' },
+                    { id: 'discardedImages', value: stats.discarded, key: 'discarded' }
+                ];
                 
-                // Actualizar métricas de error
+                // Actualizar cada estadística y aplicar highlight si cambió
+                statsToUpdate.forEach(stat => {
+                    const element = document.getElementById(stat.id);
+                    const statContainer = element.closest('.stat');
+                    
+                    // Si el valor cambió y no es la primera carga, aplicar highlight
+                    if (previousStats[stat.key] !== undefined && 
+                        previousStats[stat.key] !== stat.value) {
+                        
+                        // Remover clase highlight anterior si existe
+                        statContainer.classList.remove('highlight');
+                        
+                        // Forzar reflow para reiniciar la animación
+                        statContainer.offsetHeight;
+                        
+                        // Aplicar highlight
+                        statContainer.classList.add('highlight');
+                        
+                        // Remover highlight después de la animación (1 segundo)
+                        setTimeout(() => {
+                            statContainer.classList.remove('highlight');
+                        }, 1000);
+                    }
+                    
+                    // Actualizar el contenido
+                    element.textContent = stat.value;
+                });
+                
+                // Actualizar métricas de error (sin highlight por ahora)
                 document.getElementById('errorRate').textContent = `${stats.error_rate}%`;
                 document.getElementById('editRate').textContent = `${stats.edit_rate}%`;
                 document.getElementById('discardRate').textContent = `${stats.discard_rate}%`;
+                
+                // Guardar los valores actuales para la próxima comparación
+                previousStats = {
+                    total_original: stats.total_original,
+                    reviewed: stats.reviewed,
+                    remaining: stats.remaining,
+                    correct: stats.correct,
+                    edited: stats.edited,
+                    discarded: stats.discarded
+                };
                 
             } catch (error) {
                 console.error('Error updating stats:', error);
