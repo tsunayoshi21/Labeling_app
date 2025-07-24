@@ -17,10 +17,11 @@ original_data = {}
 current_index = 0
 image_keys = []
 corrected_json_path = ""
+review_status = {}  # Nuevo: seguimiento del estado de revisión de cada imagen
 
 def load_data():
     """Cargar datos del JSON y crear una copia de trabajo"""
-    global current_data, original_data, image_keys, corrected_json_path, current_index
+    global current_data, original_data, image_keys, corrected_json_path, current_index, review_status
     
     # Verificar que existan los archivos
     if not os.path.exists(JSON_PATH):
@@ -56,6 +57,7 @@ def load_data():
             if isinstance(progress_data, dict) and 'data' in progress_data:
                 current_data = progress_data['data']
                 current_index = progress_data.get('current_index', 0)
+                review_status = progress_data.get('review_status', {})
                 corrected_json_path = latest_progress
                 print(f"Reanudando progreso desde: {latest_progress}")
                 print(f"Continuando desde la imagen {current_index + 1}")
@@ -63,16 +65,19 @@ def load_data():
                 # Formato antiguo, solo los datos
                 current_data = progress_data
                 current_index = 0
+                review_status = {}
                 corrected_json_path = latest_progress
                 print(f"Archivo de progreso encontrado (formato antiguo): {latest_progress}")
         except Exception as e:
             print(f"Error al cargar progreso anterior: {e}")
             current_data = original_data.copy()
             current_index = 0
+            review_status = {}
     else:
         # No hay progreso previo, empezar desde cero
         current_data = original_data.copy()
         current_index = 0
+        review_status = {}
     
     # Obtener lista de claves (nombres de imágenes) del archivo original
     # para mantener el orden original
@@ -80,6 +85,7 @@ def load_data():
     
     print(f"Datos cargados: {len(image_keys)} imágenes totales")
     print(f"Progreso actual: imagen {current_index + 1} de {len(image_keys)}")
+    print(f"Imágenes revisadas: {len(review_status)}")
     print(f"Las correcciones se guardarán en: {corrected_json_path}")
 
 def save_progress():
@@ -87,6 +93,7 @@ def save_progress():
     progress_data = {
         'data': current_data,
         'current_index': current_index,
+        'review_status': review_status,
         'original_count': len(original_data),
         'timestamp': datetime.now().isoformat()
     }
@@ -144,7 +151,7 @@ def get_current_image():
 @app.route('/api/submit_correction', methods=['POST'])
 def submit_correction():
     """Procesar corrección del usuario"""
-    global current_index
+    global current_index, review_status
     
     data = request.json
     action = data.get('action')
@@ -153,18 +160,21 @@ def submit_correction():
     if current_index >= len(image_keys):
         return jsonify({'error': 'No hay más imágenes para revisar'})
     
+    # Marcar la imagen como revisada con su estado específico
     if action == 'correct':
-        # La transcripción es correcta, no hacer nada
-        pass
+        # La transcripción es correcta, no cambiar el contenido
+        review_status[image_key] = 'correct'
     elif action == 'edit':
         # Actualizar con la transcripción corregida
         new_transcription = data.get('new_transcription', '').strip()
         if new_transcription:
             current_data[image_key] = new_transcription
+            review_status[image_key] = 'edited'
     elif action == 'discard':
         # Eliminar la entrada del diccionario
         if image_key in current_data:
             del current_data[image_key]
+        review_status[image_key] = 'discarded'
     
     # Avanzar al siguiente
     current_index += 1
@@ -185,6 +195,8 @@ def go_to_index():
     
     if 0 <= new_index < len(image_keys):
         current_index = new_index
+        # Guardar progreso al cambiar de índice
+        save_progress()
         return jsonify({'success': True, 'current_index': current_index})
     else:
         return jsonify({'error': 'Índice fuera de rango'})
@@ -198,41 +210,38 @@ def serve_image(filename):
 def get_stats():
     """Obtener estadísticas del progreso"""
     total_original = len(original_data)
-    total_current = len(current_data)
-    discarded = total_original - total_current
-    reviewed = current_index
+    
+    # Contar estados de revisión basados en review_status
+    reviewed_count = len(review_status)  # Total de imágenes realmente revisadas
+    correct_count = sum(1 for status in review_status.values() if status == 'correct')
+    edited_count = sum(1 for status in review_status.values() if status == 'edited')
+    discarded_count = sum(1 for status in review_status.values() if status == 'discarded')
+    
+    # Calcular restantes
     remaining = len(image_keys) - current_index
     
-    # Calcular métricas de error
-    edited_count = 0
-    for i in range(min(current_index, len(image_keys))):
-        image_key = image_keys[i]
-        if image_key in current_data and image_key in original_data:
-            if current_data[image_key] != original_data[image_key]:
-                edited_count += 1
-    
-    # Calcular porcentajes
+    # Calcular porcentajes basados en imágenes realmente revisadas
     error_rate = 0
-    if reviewed > 0:
-        error_rate = round(((edited_count + discarded) / reviewed) * 100, 1)
+    if reviewed_count > 0:
+        error_rate = round(((edited_count + discarded_count) / reviewed_count) * 100, 1)
     
     edit_rate = 0
-    if reviewed > 0:
-        edit_rate = round((edited_count / reviewed) * 100, 1)
+    if reviewed_count > 0:
+        edit_rate = round((edited_count / reviewed_count) * 100, 1)
     
     discard_rate = 0
-    if reviewed > 0:
-        discard_rate = round((discarded / reviewed) * 100, 1)
+    if reviewed_count > 0:
+        discard_rate = round((discarded_count / reviewed_count) * 100, 1)
     
     return jsonify({
         'total_original': total_original,
-        'total_current': total_current,
-        'discarded': discarded,
-        'reviewed': reviewed,
-        'remaining': remaining,
-        'edited': edited_count,
-        'correct': reviewed - edited_count - discarded,
-        'progress_percent': round((reviewed / len(image_keys)) * 100, 1) if image_keys else 0,
+        'total_current': len(current_data),  # Imágenes que quedaron después de descartes
+        'reviewed': reviewed_count,  # Imágenes realmente revisadas
+        'remaining': remaining,  # Imágenes por revisar desde current_index
+        'correct': correct_count,  # Imágenes marcadas como correctas
+        'edited': edited_count,  # Imágenes editadas
+        'discarded': discarded_count,  # Imágenes descartadas
+        'progress_percent': round((current_index / len(image_keys)) * 100, 1) if image_keys else 0,
         'error_rate': error_rate,
         'edit_rate': edit_rate,
         'discard_rate': discard_rate
