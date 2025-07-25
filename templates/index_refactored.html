@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Corrector de Transcripciones OCR</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Corrector de Transcripciones OCR</h1>
+        </div>
+
+        <div class="progress-container">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressBar" style="width: 0%;">0%</div>
+            </div>
+            <div class="stats">
+                <div class="stat">
+                    <div class="stat-number" id="totalImages">-</div>
+                    <div class="stat-label">Total</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number" id="reviewedImages">-</div>
+                    <div class="stat-label">Revisadas</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number" id="remainingImages">-</div>
+                    <div class="stat-label">Restantes</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number" id="correctImages">-</div>
+                    <div class="stat-label">Correctas</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number" id="editedImages">-</div>
+                    <div class="stat-label">Editadas</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number" id="discardedImages">-</div>
+                    <div class="stat-label">Descartadas</div>
+                </div>
+            </div>
+            
+            <!-- Métricas de Error -->
+            <div class="error-metrics">
+                <div class="metric-item">
+                    <div class="metric-label">Tasa de Error Total:</div>
+                    <div class="metric-value" id="errorRate">0%</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-label">Editadas:</div>
+                    <div class="metric-value" id="editRate">0%</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-label">Descartadas:</div>
+                    <div class="metric-value" id="discardRate">0%</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div id="loadingDiv" class="loading">
+                <div class="spinner"></div>
+            </div>
+
+            <div id="workArea" class="hidden">
+                <!-- Layout principal optimizado -->
+                <div class="main-work-area">
+                    <!-- Área central con imagen y controles -->
+                    <div class="central-area">
+                        <!-- Imagen -->
+                        <div class="image-container">
+                            <img id="currentImage" class="current-image hidden" alt="Imagen actual">
+                            <div id="noImageMessage" class="hidden">
+                                <h3>⚠️ Imagen no encontrada</h3>
+                                <p>La imagen no existe en la carpeta especificada</p>
+                            </div>
+                        </div>
+
+                        <!-- Botón de guardado debajo de la imagen -->
+                        <div class="compact-save">
+                            <button id="saveBtn" class="btn-save-compact">💾 Guardar</button>
+                            <div id="saveMessage" class="save-message"></div>
+                        </div>
+
+                        <!-- Transcripción -->
+                        <div class="transcription-container">
+                            <div class="transcription-label">Transcripción actual:</div>
+                            <div id="transcriptionDisplay" class="transcription-text"></div>
+                            <input type="text" id="editInput" class="edit-input hidden" placeholder="Ingresa la transcripción correcta...">
+                        </div>
+
+                        <!-- Acciones principales -->
+                        <div class="actions">
+                            <button id="correctBtn" class="btn btn-correct">
+                                ✓ Correcta <span class="hotkey">1</span>
+                            </button>
+                            <button id="editBtn" class="btn btn-edit">
+                                ✏️ Editar <span class="hotkey">2</span>
+                            </button>
+                            <button id="discardBtn" class="btn btn-discard">
+                                🗑️ Descartar <span class="hotkey">3</span>
+                            </button>
+                            <button id="saveEditBtn" class="btn btn-save hidden">💾 Guardar</button>
+                            <button id="cancelBtn" class="btn btn-cancel hidden">✖️ Cancelar</button>
+                        </div>
+
+                        <!-- Navegación -->
+                        <div class="navigation">
+                            <button id="prevBtn" class="btn-nav">← Anterior</button>
+                            <span>Ir a imagen:</span>
+                            <input type="number" id="navInput" class="nav-input" min="1" placeholder="1">
+                            <button id="navBtn" class="btn-nav">Ir</button>
+                        </div>
+                    </div>
+
+                    <!-- Hotkeys en los laterales -->
+                    <div class="hotkeys-lateral left-hotkeys">
+                        <h6>⌨️ Acciones</h6>
+                        <div class="hotkey-compact"><kbd>1</kbd> / <kbd>Espacio</kbd><br>Correcta</div>
+                        <div class="hotkey-compact"><kbd>2</kbd> / <kbd>E</kbd><br>Editar</div>
+                        <div class="hotkey-compact"><kbd>3</kbd> / <kbd>Del</kbd><br>Descartar</div>
+                        <div class="hotkey-compact"><kbd>←</kbd><br>Anterior</div>
+                    </div>
+
+                    <div class="hotkeys-lateral right-hotkeys">
+                        <h6>⌨️ Extras</h6>
+                        <div class="hotkey-compact"><kbd>Ctrl+S</kbd><br>Guardar</div>
+                        <div class="hotkey-compact"><kbd>Enter</kbd><br>Confirmar</div>
+                        <div class="hotkey-compact"><kbd>Esc</kbd><br>Cancelar</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="completionDiv" class="hidden">
+                <div class="completion-message">
+                    <h2>🎉 ¡Completado!</h2>
+                    <p>Has revisado todas las imágenes exitosamente.</p>
+                    <div class="file-path">
+                        <strong>Archivo de correcciones guardado en:</strong><br>
+                        <span id="correctedFilePath"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="errorDiv" class="error hidden"></div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
