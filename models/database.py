@@ -2,7 +2,7 @@
 Modelos de base de datos SQLite para la aplicación de anotación colaborativa
 """
 from datetime import datetime
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, ForeignKey, Index
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -20,6 +20,12 @@ class User(Base):
     
     # Relaciones
     annotations = relationship('Annotation', back_populates='user')
+    
+    # Índices para mejorar rendimiento
+    __table_args__ = (
+        Index('idx_user_role', 'role'),
+        Index('idx_user_username', 'username'),
+    )
     
     def __init__(self, username, password, role='annotator'):
         self.username = username
@@ -81,6 +87,16 @@ class Annotation(Base):
     # Relaciones
     image = relationship('Image', back_populates='annotations')
     user = relationship('User', back_populates='annotations')
+    
+    # Índices para mejorar rendimiento
+    __table_args__ = (
+        Index('idx_annotation_user_id', 'user_id'),
+        Index('idx_annotation_status', 'status'),
+        Index('idx_annotation_image_id', 'image_id'),
+        Index('idx_annotation_user_status', 'user_id', 'status'),
+        Index('idx_annotation_status_image', 'status', 'image_id'),
+        Index('idx_annotation_updated_at', 'updated_at'),
+    )
     
     def update_status(self, status, corrected_text=None):
         """Actualiza el estado y texto de la anotación"""

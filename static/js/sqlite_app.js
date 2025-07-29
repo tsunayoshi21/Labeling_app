@@ -313,6 +313,7 @@ class AppController {
         this.taskHistory = [];
         this.pendingTasks = [];
         this.historyIndex = -1; // -1 significa que estamos en la tarea actual (no en historial)
+        this.currentUser = null; // Almacenar información del usuario actual
         this.uiManager = new UIManager();
         this.editModeManager = new EditModeManager();
         this.keyboardHandler = new KeyboardHandler(this);
@@ -333,11 +334,40 @@ class AppController {
         try {
             const data = await APIService.getUserInfo();
             if (data.user) {
+                this.currentUser = data.user; // Almacenar información del usuario
                 document.getElementById('user-name').textContent = 
                     `${data.user.username} (${data.user.role})`;
+                
+                // Mostrar botón de admin si el usuario es admin
+                this.showAdminButtonIfNeeded();
             }
         } catch (error) {
             console.error('Error loading user info:', error);
+        }
+    }
+
+    showAdminButtonIfNeeded() {
+        // Remover botón existente si existe
+        const existingBtn = document.getElementById('admin-panel-btn');
+        if (existingBtn) {
+            existingBtn.remove();
+        }
+
+        // Agregar botón de admin si el usuario es admin
+        if (this.currentUser && this.currentUser.role === 'admin') {
+            const userInfo = document.querySelector('.user-info');
+            const adminBtn = document.createElement('button');
+            adminBtn.id = 'admin-panel-btn';
+            adminBtn.className = 'logout-btn';
+            adminBtn.style.marginRight = '1rem';
+            adminBtn.innerHTML = '⚙️ Panel Admin';
+            adminBtn.onclick = () => {
+                window.location.href = '/admin';
+            };
+            
+            // Insertar antes del botón de cerrar sesión
+            const logoutBtn = userInfo.querySelector('.logout-btn');
+            userInfo.insertBefore(adminBtn, logoutBtn);
         }
     }
 

@@ -433,78 +433,62 @@ class DatabaseService:
     
     # Métodos de estadísticas
     def get_user_stats(self, user_id: int) -> dict:
-        """Obtiene estadísticas de un usuario"""
+        """Obtiene estadísticas de un usuario - Optimizada"""
         session = self.get_session()
         try:
-            annotations = session.query(Annotation).filter_by(user_id=user_id).all()
+            from sqlalchemy import func, case
+            
+            # Una sola consulta con COUNT y CASE para obtener todas las estadísticas
+            result = session.query(
+                func.count(Annotation.id).label('total'),
+                func.sum(case((Annotation.status == 'pending', 1), else_=0)).label('pending'),
+                func.sum(case((Annotation.status == 'corrected', 1), else_=0)).label('corrected'),
+                func.sum(case((Annotation.status == 'approved', 1), else_=0)).label('approved'),
+                func.sum(case((Annotation.status == 'discarded', 1), else_=0)).label('discarded')
+            ).filter(Annotation.user_id == user_id).first()
             
             stats = {
-                'total': len(annotations),
-                'pending': sum(1 for a in annotations if a.status == 'pending'),
-                'corrected': sum(1 for a in annotations if a.status == 'corrected'),
-                'approved': sum(1 for a in annotations if a.status == 'approved'),
-                'discarded': sum(1 for a in annotations if a.status == 'discarded')
+                'total': result.total or 0,
+                'pending': result.pending or 0,
+                'corrected': result.corrected or 0,
+                'approved': result.approved or 0,
+                'discarded': result.discarded or 0
             }
             return stats
         finally:
             session.close()
 
     def get_general_stats(self) -> dict:
-        """Obtiene estadísticas generales del sistema"""
+        """Obtiene estadísticas generales del sistema - Optimizada"""
         session = self.get_session()
         try:
-            from sqlalchemy import func, distinct
+            from sqlalchemy import func, distinct, case, and_
             
-            total_users = session.query(User).count()
-            total_images = session.query(Image).count()
+            # Consultas separadas pero más eficientes
+            total_users = session.query(func.count(distinct(User.id))).scalar()
+            total_images = session.query(func.count(distinct(Image.id))).scalar()
             
-            # Anotaciones asignadas a usuarios no admin
-            non_admin_users = session.query(User.id).filter(User.role != 'admin').subquery()
-            total_annotations = session.query(Annotation).filter(
-                Annotation.user_id.in_(session.query(non_admin_users.c.id))
-            ).count()
+            # Consulta única para estadísticas de anotaciones
+            annotation_stats = session.query(
+                # Anotaciones totales (solo usuarios no-admin)
+                func.sum(case((User.role != 'admin', 1), else_=0)).label('total_annotations'),
+                # Tareas pendientes (solo usuarios no-admin)
+                func.sum(case((and_(Annotation.status == 'pending', User.role != 'admin'), 1), else_=0)).label('pending_tasks'),
+                # Tareas completadas (solo usuarios no-admin)
+                func.sum(case((and_(Annotation.status.in_(['corrected', 'approved', 'discarded']), User.role != 'admin'), 1), else_=0)).label('completed_tasks'),
+                # Imágenes únicas con anotaciones completadas (todos los usuarios para progreso)
+                func.count(distinct(case((Annotation.status.in_(['corrected', 'approved', 'discarded']), Annotation.image_id)))).label('annotated_images_for_progress')
+            ).join(User, Annotation.user_id == User.id).first()
             
-            # Tareas pendientes para usuarios no admin
-            pending_tasks = session.query(Annotation).filter(
-                Annotation.status == 'pending',
-                Annotation.user_id.in_(session.query(non_admin_users.c.id))
-            ).count()
+            total_annotations = annotation_stats.total_annotations or 0
+            pending_tasks = annotation_stats.pending_tasks or 0
+            completed_tasks = annotation_stats.completed_tasks or 0
+            annotated_images_for_progress = annotation_stats.annotated_images_for_progress or 0
             
-            # Tareas completadas (cualquier estado diferente a pending)
-            completed_tasks = session.query(Annotation).filter(
-                Annotation.status.in_(['corrected', 'approved', 'discarded']),
-                Annotation.user_id.in_(session.query(non_admin_users.c.id))
-            ).count()
+            # Imágenes sin anotar
+            unannotated_images = total_images - annotated_images_for_progress
             
-            # Imágenes con anotaciones completadas (para calcular las sin anotar)
-            images_with_completed_annotations = session.query(distinct(Annotation.image_id)).filter(
-                Annotation.status.in_(['corrected', 'approved', 'discarded']),
-                Annotation.user_id.in_(session.query(non_admin_users.c.id))
-            ).all()
-            
-            # Extraer los IDs de las imágenes con anotaciones completadas 
-            completed_image_ids = [row[0] for row in images_with_completed_annotations]
-            
-            # Imágenes sin anotar (sin anotaciones completadas)
-            if completed_image_ids:
-                unannotated_images = session.query(Image).filter(
-                    ~Image.id.in_(completed_image_ids)
-                ).count()
-            else:
-                unannotated_images = total_images
-            
-            # Número de imágenes con anotaciones completadas (solo no-admin para estadísticas)
-            annotated_images = len(completed_image_ids)
-            
-            # Para la barra de progreso: incluir TODAS las anotaciones (incluyendo admin)
-            all_images_with_completed_annotations = session.query(distinct(Annotation.image_id)).filter(
-                Annotation.status.in_(['corrected', 'approved', 'discarded'])
-            ).all()
-            
-            all_completed_image_ids = [row[0] for row in all_images_with_completed_annotations]
-            annotated_images_for_progress = len(all_completed_image_ids)
-            
-            # Calcular progreso con todas las anotaciones
+            # Calcular progreso
             progress_percentage = round((annotated_images_for_progress / total_images * 100), 1) if total_images > 0 else 0
             
             return {

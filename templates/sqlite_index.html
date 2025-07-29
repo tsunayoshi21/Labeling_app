@@ -5,27 +5,47 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Corrector de Transcripciones OCR - Colaborativo</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
     <style>
         /* Estilos adicionales específicos para SQLite */
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
+        .container .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+            color: white !important;
             padding: 1rem 2rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            position: relative;
+            z-index: 1;
+            text-align: left !important;
+            margin-bottom: 0 !important;
         }
         
-        .header h1 {
-            font-size: 1.5rem;
+        .container .header h1 {
+            font-size: 1.5rem !important;
+            color: white !important;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5) !important;
+            font-weight: 600 !important;
+            letter-spacing: -0.5px;
+            margin: 0 !important;
+            z-index: 2;
+            position: relative;
+            background: none !important;
+            -webkit-background-clip: initial !important;
+            -webkit-text-fill-color: white !important;
+            background-clip: initial !important;
         }
         
         .user-info {
             display: flex;
             align-items: center;
             gap: 1rem;
+            color: white !important;
+            z-index: 2;
+        }
+        
+        .user-info span {
+            color: white !important;
         }
         
         .logout-btn {
