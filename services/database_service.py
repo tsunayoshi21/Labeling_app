@@ -324,7 +324,7 @@ class DatabaseService:
                     annotation.user_id = user_id
                     annotation.image_id = image.id
                     annotation.status = 'pending'
-                    annotation.updated_at = datetime.utcnow()
+                    annotation.updated_at = datetime.now()
                     session.add(annotation)
                     assignments_created += 1
             
@@ -505,16 +505,24 @@ class DatabaseService:
             session.close()
 
     def get_recent_user_activity(self, limit: int = 6) -> List[dict]:
-        """Obtiene la actividad reciente de usuarios"""
+        """Obtiene la actividad reciente de usuarios - Solo actividad real (no asignaciones)"""
         session = self.get_session()
         try:
             from sqlalchemy import func, desc, and_, case
             
-            # Query para obtener usuarios con su última actividad y estadísticas detalladas
+            # Subconsulta para obtener la última actividad real de cada usuario (solo anotaciones revisadas)
+            last_activity_subquery = session.query(
+                Annotation.user_id,
+                func.max(Annotation.updated_at).label('last_activity')
+            ).filter(
+                Annotation.status.in_(['corrected', 'approved', 'discarded'])
+            ).group_by(Annotation.user_id).subquery()
+            
+            # Query principal que obtiene estadísticas completas pero ordena por actividad real
             user_activity = session.query(
                 User.id,
                 User.username,
-                func.max(Annotation.updated_at).label('last_activity'),
+                last_activity_subquery.c.last_activity,
                 func.count(Annotation.id).label('total_assigned'),
                 func.sum(
                     case(
@@ -542,14 +550,16 @@ class DatabaseService:
                 ).label('discarded')
             ).join(
                 Annotation, User.id == Annotation.user_id
+            ).join(
+                last_activity_subquery, User.id == last_activity_subquery.c.user_id
             ).filter(
                 Annotation.user_id.isnot(None)
             ).group_by(
-                User.id, User.username
+                User.id, User.username, last_activity_subquery.c.last_activity
             ).having(
-                func.max(Annotation.updated_at).isnot(None)
+                last_activity_subquery.c.last_activity.isnot(None)
             ).order_by(
-                desc(func.max(Annotation.updated_at))
+                desc(last_activity_subquery.c.last_activity)
             ).limit(limit).all()
             
             # Formatear los resultados
