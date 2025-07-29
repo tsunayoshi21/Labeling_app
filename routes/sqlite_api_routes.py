@@ -358,6 +358,38 @@ def get_user_stats():
     stats = db_service.get_user_stats(user_id)
     return jsonify(stats)
 
+# Endpoint para análisis de rendimiento (solo para desarrollo)
+@sqlite_api_bp.route('/dev/performance', methods=['GET'])
+@login_required
+def analyze_performance():
+    """Analiza el rendimiento de consultas críticas (solo desarrollo)"""
+    import time
+    from flask import current_app
+    
+    # Solo permitir en modo debug
+    if not current_app.debug:
+        return jsonify({'error': 'Not available in production'}), 403
+    
+    user_id = session['user_id']
+    results = {}
+    
+    # Timing para get_user_stats
+    start = time.time()
+    stats = db_service.get_user_stats(user_id)
+    results['get_user_stats_ms'] = round((time.time() - start) * 1000, 2)
+    
+    # Timing para get_general_stats
+    start = time.time()
+    general_stats = db_service.get_general_stats()
+    results['get_general_stats_ms'] = round((time.time() - start) * 1000, 2)
+    
+    # Timing para get_recent_user_activity
+    start = time.time()
+    activity = db_service.get_recent_user_activity(6)
+    results['get_recent_user_activity_ms'] = round((time.time() - start) * 1000, 2)
+    
+    return jsonify(results)
+
 # Manejo de errores
 @sqlite_api_bp.errorhandler(404)
 def not_found(error):

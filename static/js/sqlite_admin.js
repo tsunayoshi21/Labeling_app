@@ -487,6 +487,11 @@ async function logout() {
     }
 }
 
+// Función para ir a anotar (permite al admin anotar como usuario regular)
+function goToAnnotation() {
+    window.location.href = '/';
+}
+
 // Cerrar modales al hacer click fuera de ellos
 window.addEventListener('click', function(event) {
     const modals = document.querySelectorAll('.modal');

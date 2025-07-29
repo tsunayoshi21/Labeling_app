@@ -1,109 +1,206 @@
-# Corrector de Transcripciones OCR
+# 📝 Corrector de Transcripciones OCR - Colaborativo
 
-Una aplicación web Flask para revisar y corregir transcripciones OCR de imágenes de palabras de manera eficiente.
+Una aplicación web Flask moderna para revisar y corregir transcripciones OCR de imágenes de palabras de manera colaborativa y eficiente. Diseñada para equipos que necesitan anotar grandes volúmenes de datos de texto con precisión.
 
-## Características
+## ✨ Características Principales
 
-- **Interfaz web moderna y responsive**: Diseño optimizado para una experiencia fluida
-- **Hotkeys para todas las acciones**: Navegación rápida con teclado
-- **Guardado automático y manual**: Preserva el progreso automáticamente y permite guardado manual
-- **Reanudación de sesiones**: Continúa desde donde dejaste la última vez
-- **Métricas en tiempo real**: Estadísticas de progreso, tasa de error, y rendimiento
-- **Navegación flexible**: Avanza, retrocede o salta a cualquier imagen
-- **Gestión de errores**: Manejo robusto de imágenes faltantes y errores de red
+### 🚀 Colaboración Multi-Usuario
+- **Sistema de usuarios robusto** con roles (Admin/Anotador)
+- **Base de datos SQLite** para persistencia y concurrencia
+- **Panel de administración completo** para gestión de usuarios y tareas
+- **Asignación automática** de tareas a usuarios
+- **Estadísticas en tiempo real** por usuario y globales
 
-## Screenshots
+### ⚡ Experiencia de Usuario Optimizada
+- **Interfaz moderna y responsive**
+- **Hotkeys completos** para navegación rápida (teclado + mouse)
+- **Navegación histórica** - navega entre tareas anteriores y siguientes
+- **Vista previa de tareas pendientes** en tiempo real
+- **Efectos visuales suaves** y confirmación de acciones
+- **Estados visuales claros** (Corregido ✓, Aprobado ✓, Descartado 🗑️)
 
-![Interfaz Principal](screenshot.png)
+### 📊 Métricas y Monitoreo
+- **Estadísticas detalladas** por usuario: total, pendientes, corregidas, aprobadas, descartadas
+- **Actividad reciente** con timestamps de última anotación
+- **Barra de progreso visual** del proyecto completo
+- **Métricas de rendimiento** - endpoints optimizados (~20-80ms)
 
-## Instalación
+### 🎯 Funcionalidades Avanzadas
+- **Persistencia de sesiones** - continúa donde dejaste
+- **Manejo robusto de errores** e imágenes faltantes
+- **Carga incremental** y optimizada de datos
+- **Indexación de base de datos** para consultas rápidas
 
-1. Clona el repositorio:
+## 🖼️ Screenshots
+
+### Interfaz Principal de Anotación
+![Interfaz de Anotación](screenshots/annotation_interface.png)
+
+### Panel de Administración
+![Panel Admin](screenshots/admin_panel.png)
+
+## 🚀 Instalación Rápida
+
+### Prerrequisitos
+- Python 3.8+
+- Flask y dependencias (ver `requirements.txt`)
+
+### Configuración
+
+1. **Clona el repositorio:**
 ```bash
-git clone https://github.com/tuusuario/Labeling_app.git
-cd Labeling_app
+git clone https://github.com/tuusuario/labeling-app.git
+cd labeling-app
 ```
 
-2. Instala las dependencias:
+2. **Instala dependencias:**
 ```bash
 pip install -r requirements.txt
 ```
 
-3. Configura los datos:
-   - Coloca tu archivo JSON de transcripciones en `data/words_raw_dict.json`
-   - Coloca las imágenes en `data/words_cropped_raw/`
-
-## Uso
-
-1. Ejecuta la aplicación:
+3. **Configura los datos:**
 ```bash
-python app.py
+# Coloca las imágenes en:
+mkdir -p data/words_cropped_raw/
+# Copia tus imágenes aquí
+
+# La base de datos SQLite se crea automáticamente
 ```
 
-2. Abre tu navegador en `http://localhost:5000`
+4. **Ejecuta la aplicación:**
+```bash
+python app_sqlite.py
+```
 
-3. Usa los siguientes atajos de teclado:
-   - **1** o **Espacio**: Marcar transcripción como correcta
-   - **2** o **E**: Editar transcripción
-   - **3** o **Del**: Descartar imagen
-   - **←**: Ir a imagen anterior
-   - **Ctrl+S**: Guardar progreso manualmente
-   - **Enter**: Confirmar edición
-   - **Esc**: Cancelar edición
+5. **Accede a la aplicación:**
+   - Abre `http://localhost:5000`
 
-## Estructura del Proyecto
+## 🎮 Uso y Controles
+
+### Para Anotadores
+
+#### ⌨️ Hotkeys Principales
+| Tecla | Acción |
+|-------|--------|
+| `1` / `Espacio` | ✅ Marcar como correcta |
+| `2` / `E` | ✏️ Editar transcripción |
+| `3` / `Del` | 🗑️ Descartar imagen |
+| `←` | ⬅️ Tarea anterior |
+| `→` | ➡️ Siguiente tarea |
+| `Enter` | 💾 Confirmar edición |
+| `Esc` | ❌ Cancelar edición |
+| `L` | 🚪 Cerrar sesión |
+
+#### 📋 Flujo de Trabajo
+1. **Revisa la imagen** y transcripción mostrada
+2. **Selecciona una acción:**
+   - **Correcta:** Si la transcripción es precisa
+   - **Editar:** Para corregir errores
+   - **Descartar:** Si la imagen no es útil
+3. **Navega** entre tareas usando las flechas o historial
+4. **Monitorea tu progreso** en las estadísticas superiores
+
+### Para Administradores
+
+#### 👥 Gestión de Usuarios
+- **Crear/editar usuarios** con roles específicos
+- **Ver actividad reciente** de todos los anotadores
+- **Estadísticas detalladas** por usuario y globales
+
+#### 📋 Gestión de Tareas
+- **Asignación automática** de N imágenes aleatorias a usuarios
+- **Monitoreo en tiempo real** del progreso del proyecto
+- **Vista general** de imágenes completadas vs. pendientes
+
+#### 🔄 Modo Dual
+- **"Ir a Anotar"** - Los admins pueden anotar como usuarios regulares
+- **Cambio fluido** entre panel admin y vista de anotación
+
+## 🏗️ Arquitectura del Proyecto
 
 ```
 Labeling_app/
-├── app.py                 # Backend Flask principal
-├── templates/
-│   └── index.html        # Frontend HTML/CSS/JS
-├── data/                 # Carpeta de datos (no incluida en git)
-│   ├── words_raw_dict.json
-│   └── words_cropped_raw/
-├── requirements.txt      # Dependencias Python
-└── README.md            # Este archivo
+├── 🐍 Backend Python
+│   ├── app_sqlite.py           # Aplicación principal SQLite
+│   ├── models/
+│   │   └── database.py         # Modelos de BD (User, Image, Annotation)
+│   ├── services/
+│   │   └── database_service.py # Lógica de negocio
+│   ├── routes/
+│   │   └── sqlite_api_routes.py # API REST endpoints
+│   └── config.py               # Configuración
+│
+├── 🎨 Frontend
+│   ├── templates/
+│   │   ├── sqlite_index.html   # Interfaz de anotación
+│   │   ├── sqlite_admin.html   # Panel de administración
+│   │   └── sqlite_login.html   # Página de login
+│   ├── static/
+│   │   ├── js/
+│   │   │   ├── sqlite_app.js   # Lógica de anotación
+│   │   │   └── sqlite_admin.js # Lógica de admin
+│   │   └── css/
+│   │       └── styles.css      # Estilos globales
+│
+├── 📊 Base de Datos
+│   └── labeling_app.db         # SQLite (se crea automáticamente)
+│
+├── 📁 Datos
+│   └── data/
+│       └── words_cropped_raw/  # Imágenes a anotar
+│
+└── 🛠️ Configuración
+    ├── requirements.txt        # Dependencias Python
+    ├── gunicorn.conf.py       # Configuración para producción
+    └── start_server.sh        # Script de inicio
 ```
 
-## Funcionalidades Técnicas
+## 📡 API Endpoints
 
-### Backend (Flask)
-- API REST para navegación y corrección
-- Carga incremental de imágenes
-- Guardado automático cada 10 correcciones
-- Gestión de sesiones y reanudación de progreso
-- Cálculo de métricas en tiempo real
+### Autenticación
+- `POST /api/v2/login` - Iniciar sesión
+- `POST /api/v2/logout` - Cerrar sesión
+- `GET /api/v2/me` - Información del usuario actual
 
-### Frontend (HTML/CSS/JS)
-- Interfaz responsive con diseño centrado
-- Hotkeys laterales para pantallas grandes
-- Feedback visual en tiempo real
-- Manejo de errores y estados de carga
-- Optimización para diferentes tamaños de imagen
+### Tareas de Anotación
+- `GET /api/v2/task/next` - Obtener siguiente tarea
+- `GET /api/v2/task/history` - Historial de tareas
+- `GET /api/v2/task/pending-preview` - Vista previa de pendientes
+- `GET /api/v2/task/load/<id>` - Cargar tarea específica
+- `PUT /api/v2/annotations/<id>` - Actualizar anotación
 
-## Configuración
+### Administración
+- `GET /api/v2/admin/users` - Listar usuarios
+- `POST /api/v2/admin/users` - Crear usuario
+- `POST /api/v2/admin/assignments/auto` - Asignación automática
+- `GET /api/v2/admin/stats` - Estadísticas globales
 
-El archivo JSON de entrada debe tener la estructura:
-```json
-{
-  "imagen1.jpg": "transcripcion1",
-  "imagen2.jpg": "transcripcion2",
-  ...
-}
-```
+### Utilidades
+- `GET /api/v2/stats` - Estadísticas del usuario
+- `GET /images/<filename>` - Servir imágenes
 
-## Contribuir
+## 🤝 Contribuir
 
-1. Fork el proyecto
-2. Crea una rama para tu feature (`git checkout -b feature/AmazingFeature`)
-3. Commit tus cambios (`git commit -m 'Add some AmazingFeature'`)
-4. Push a la rama (`git push origin feature/AmazingFeature`)
-5. Abre un Pull Request
+1. **Fork** el proyecto
+2. **Crea una rama** (`git checkout -b feature/nueva-caracteristica`)
+3. **Commit** tus cambios (`git commit -m 'Añadir nueva característica'`)
+4. **Push** a la rama (`git push origin feature/nueva-caracteristica`)
+5. **Abre un Pull Request**
 
-## Licencia
+## 📈 Roadmap
 
-Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) para detalles.
+- [ ] **Exportación de datos** en múltiples formatos
+- [ ] **Importación masiva** de imágenes y transcripciones
+- [ ] **Métricas avanzadas** con gráficos
+- [ ] **Notificaciones en tiempo real**
+- [ ] **API pública** para integraciones
+- [ ] **Soporte multi-idioma**
 
-## Autor
+## 📄 Licencia
 
-Creado para facilitar la corrección eficiente de transcripciones OCR en datasets de imágenes de texto.
+Este proyecto está bajo la **Licencia MIT** - ver [LICENSE](LICENSE) para detalles.
+
+
+**¿Necesitas ayuda?** Abre un [issue](https://github.com/tuusuario/labeling-app/issues) o contacta al desarrollador.
+
+**⭐ ¿Te gusta el proyecto?** ¡Dale una estrella en GitHub!

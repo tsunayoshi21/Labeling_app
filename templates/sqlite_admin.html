@@ -27,6 +27,13 @@
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
         
+        .header h1 {
+            font-size: 1.5rem;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            font-weight: 600;
+            letter-spacing: -0.5px;
+        }
+        
         .nav-tabs {
             display: flex;
             gap: 1rem;
@@ -434,6 +441,9 @@
         <h1>🛠️ Panel de Administración</h1>
         <div class="user-info">
             <span id="admin-name">Admin</span>
+            <button class="btn btn-primary" onclick="goToAnnotation()" style="margin-right: 1rem;">
+                📝 Ir a Anotar
+            </button>
             <button class="btn btn-danger" onclick="logout()">Cerrar Sesión</button>
         </div>
     </div>
