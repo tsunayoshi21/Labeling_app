@@ -107,6 +107,22 @@ class UIManager {
         }, 200);
     }
 
+    softHighlightButton(buttonId) {
+        const button = document.getElementById(buttonId);
+        if (!button || button.classList.contains('hidden')) return;
+        
+        // Efecto más suave: solo un ligero cambio de opacidad y escala
+        button.style.transform = 'scale(1.05)';
+        button.style.opacity = '0.8';
+        button.style.transition = 'all 0.15s ease-out';
+        
+        setTimeout(() => {
+            button.style.transform = '';
+            button.style.opacity = '';
+            button.style.transition = '';
+        }, 150);
+    }
+
     updateImage(imageData) {
         const imageElement = document.getElementById('currentImage');
         const noImageMessage = document.getElementById('noImageMessage');
@@ -382,6 +398,25 @@ class AppController {
         document.getElementById('prevBtn').addEventListener('click', () => this.navigatePrevious());
         document.getElementById('nextBtn').addEventListener('click', () => this.navigateNext());
         
+        // Hotkeys para navegación
+        document.addEventListener('keydown', (e) => {
+            // Solo activar hotkeys si no estamos editando texto
+            if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
+                return;
+            }
+            
+            switch(e.key) {
+                case 'ArrowLeft':
+                    e.preventDefault();
+                    this.navigatePrevious();
+                    break;
+                case 'ArrowRight':
+                    e.preventDefault();
+                    this.navigateNext();
+                    break;
+            }
+        });
+        
         document.getElementById('editInput').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
@@ -574,6 +609,9 @@ class AppController {
             historyLength: this.taskHistory.length
         });
         
+        // Efecto visual de confirmación suave
+        this.uiManager.softHighlightButton('prevBtn');
+        
         if (this.historyIndex === -1) {
             // Estamos en tarea actual, ir al historial más reciente
             if (this.taskHistory.length > 0) {
@@ -600,6 +638,9 @@ class AppController {
             historyIndex: this.historyIndex,
             historyLength: this.taskHistory.length
         });
+        
+        // Efecto visual de confirmación suave
+        this.uiManager.softHighlightButton('nextBtn');
         
         if (this.historyIndex > 0) {
             // Ir hacia adelante en el historial (más reciente)
