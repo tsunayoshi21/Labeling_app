@@ -1,7 +1,80 @@
-// JavaScript para el panel de administración
+// JavaScript para el panel de administración con JWT Auth
+
+// Importar servicios JWT del archivo principal
+// (En un entorno de producción usaríamos módulos ES6)
+
 class AdminPanel {
     constructor() {
+        this.checkAuthentication();
         this.init();
+    }
+
+    checkAuthentication() {
+        // Verificar si tenemos token JWT
+        const token = localStorage.getItem('access_token');
+        const user = JSON.parse(localStorage.getItem('current_user') || '{}');
+        
+        if (!token || user.role !== 'admin') {
+            window.location.href = '/login';
+            return;
+        }
+    }
+
+    getAuthHeaders() {
+        const token = localStorage.getItem('access_token');
+        return {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        };
+    }
+
+    async makeRequest(url, options = {}) {
+        options.headers = {
+            ...options.headers,
+            ...this.getAuthHeaders()
+        };
+
+        let response = await fetch(url, options);
+
+        // Si el token expiró, intentar renovarlo
+        if (response.status === 401) {
+            const refreshToken = localStorage.getItem('refresh_token');
+            if (refreshToken) {
+                try {
+                    const refreshResponse = await fetch('/api/v2/refresh', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ refresh_token: refreshToken })
+                    });
+
+                    if (refreshResponse.ok) {
+                        const data = await refreshResponse.json();
+                        localStorage.setItem('access_token', data.access_token);
+                        if (data.refresh_token) {
+                            localStorage.setItem('refresh_token', data.refresh_token);
+                        }
+
+                        // Reintentar la request original
+                        options.headers = {
+                            ...options.headers,
+                            ...this.getAuthHeaders()
+                        };
+                        response = await fetch(url, options);
+                    } else {
+                        window.location.href = '/login';
+                        return;
+                    }
+                } catch (error) {
+                    window.location.href = '/login';
+                    return;
+                }
+            } else {
+                window.location.href = '/login';
+                return;
+            }
+        }
+
+        return response;
     }
 
     async init() {
@@ -22,8 +95,8 @@ class AdminPanel {
 
     async loadGeneralStats() {
         try {
-            const response = await fetch('/api/v2/admin/stats');
-            if (response.ok) {
+            const response = await this.makeRequest('/api/v2/admin/stats');
+            if (response && response.ok) {
                 const stats = await response.json();
                 // Limpiar cualquier barra de progreso existente
                 const existingProgress = document.querySelector('.progress-section');
@@ -87,8 +160,8 @@ class AdminPanel {
 
     async loadUsers() {
         try {
-            const response = await fetch('/api/v2/admin/users');
-            if (response.ok) {
+            const response = await this.makeRequest('/api/v2/admin/users');
+            if (response && response.ok) {
                 const data = await response.json();
                 this.displayUsers(data.users);
                 this.displayUsersForAssignment(data.users);
@@ -136,8 +209,8 @@ class AdminPanel {
 
     async loadImages() {
         try {
-            const response = await fetch('/api/v2/admin/images');
-            if (response.ok) {
+            const response = await this.makeRequest('/api/v2/admin/images');
+            if (response && response.ok) {
                 const data = await response.json();
                 this.displayImages(data.images);
                 this.displayImagesForAssignment(data.images);
@@ -189,15 +262,12 @@ class AdminPanel {
         const role = document.getElementById('new-role').value;
 
         try {
-            const response = await fetch('/api/v2/admin/users', {
+            const response = await this.makeRequest('/api/v2/admin/users', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
                 body: JSON.stringify({ username, password, role })
             });
 
-            if (response.ok) {
+            if (response && response.ok) {
                 alert('Usuario creado correctamente');
                 this.closeModal('create-user-modal');
                 await this.loadUsers();
@@ -231,18 +301,15 @@ class AdminPanel {
         }
 
         try {
-            const response = await fetch('/api/v2/admin/assignments', {
+            const response = await this.makeRequest('/api/v2/admin/assignments', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
                 body: JSON.stringify({
                     user_ids: selectedUsers,
                     image_ids: selectedImages
                 })
             });
 
-            if (response.ok) {
+            if (response && response.ok) {
                 const result = await response.json();
                 const resultDiv = document.getElementById('assignment-result');
                 resultDiv.innerHTML = `
@@ -283,11 +350,8 @@ class AdminPanel {
         }
 
         try {
-            const response = await fetch('/api/v2/admin/assignments/auto', {
+            const response = await this.makeRequest('/api/v2/admin/assignments/auto', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
                 body: JSON.stringify({
                     user_id: parseInt(userId),
                     count: count,
@@ -295,7 +359,7 @@ class AdminPanel {
                 })
             });
 
-            if (response.ok) {
+            if (response && response.ok) {
                 const result = await response.json();
                 const resultDiv = document.getElementById('auto-assignment-result');
                 resultDiv.innerHTML = `
@@ -333,10 +397,10 @@ class AdminPanel {
 
     async loadRecentActivity() {
         try {
-            const response = await fetch('/api/v2/admin/recent-activity?limit=6');
-            if (response.ok) {
+            const response = await this.makeRequest('/api/v2/admin/recent-activity?limit=6');
+            if (response && response.ok) {
                 const data = await response.json();
-                this.displayRecentActivity(data.activity);
+                this.displayRecentActivity(data.recent_activity);
             }
         } catch (error) {
             console.error('Error loading recent activity:', error);
@@ -460,8 +524,8 @@ async function viewUserStats(userId) {
 
 async function viewImageAnnotations(imageId) {
     try {
-        const response = await fetch(`/api/v2/admin/images/${imageId}/annotations`);
-        if (response.ok) {
+        const response = await adminPanel.makeRequest(`/api/v2/admin/images/${imageId}/annotations`);
+        if (response && response.ok) {
             const data = await response.json();
             // TODO: Mostrar modal con anotaciones
             console.log('Anotaciones para imagen', imageId, data);
@@ -474,15 +538,29 @@ async function viewImageAnnotations(imageId) {
 
 async function logout() {
     try {
-        const response = await fetch('/api/v2/logout', {
-            method: 'POST'
-        });
-        
-        if (response.ok) {
-            window.location.href = '/login';
+        const token = localStorage.getItem('access_token');
+        if (token) {
+            await fetch('/api/v2/logout', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
         }
+        
+        // Limpiar tokens locales
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+        localStorage.removeItem('current_user');
+        
+        window.location.href = '/login';
     } catch (error) {
         console.error('Error logging out:', error);
+        // Limpiar tokens locales en caso de error
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+        localStorage.removeItem('current_user');
         window.location.href = '/login';
     }
 }

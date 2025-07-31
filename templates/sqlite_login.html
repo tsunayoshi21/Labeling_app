@@ -195,6 +195,11 @@
                 const data = await response.json();
                 
                 if (response.ok && data.success) {
+                    // Guardar tokens JWT
+                    localStorage.setItem('access_token', data.access_token);
+                    localStorage.setItem('refresh_token', data.refresh_token);
+                    localStorage.setItem('current_user', JSON.stringify(data.user));
+                    
                     successDiv.textContent = 'Inicio de sesión exitoso. Redirigiendo...';
                     successDiv.style.display = 'block';
                     

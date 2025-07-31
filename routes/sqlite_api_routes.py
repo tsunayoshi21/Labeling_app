@@ -1,9 +1,11 @@
 """
-Rutas API para la aplicación de anotación colaborativa con SQLite
+Rutas API para la aplicación de anotación colaborativa con SQLite con JWT Auth
 """
-from flask import Blueprint, request, jsonify, session
-from functools import wraps
+from flask import Blueprint, request, jsonify
 from services.database_service import DatabaseService
+from services.jwt_service import jwt_required, admin_required, jwt_service
+from services.security_utils import rate_limit, validate_json_input, SecurityUtils
+import time
 
 # Blueprint para las rutas de la aplicación SQLite
 sqlite_api_bp = Blueprint('sqlite_api', __name__, url_prefix='/api/v2')
@@ -11,28 +13,8 @@ sqlite_api_bp = Blueprint('sqlite_api', __name__, url_prefix='/api/v2')
 # Instancia del servicio de base de datos
 db_service = DatabaseService()
 
-def login_required(f):
-    """Decorador para requerir autenticación"""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
-            return jsonify({'error': 'Authentication required'}), 401
-        return f(*args, **kwargs)
-    return decorated_function
-
-def admin_required(f):
-    """Decorador para requerir permisos de administrador"""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
-            return jsonify({'error': 'Authentication required'}), 401
-        
-        user = db_service.get_user_by_id(session['user_id'])
-        if not user or user.role != 'admin':
-            return jsonify({'error': 'Admin privileges required'}), 403
-        
-        return f(*args, **kwargs)
-    return decorated_function
+# Instancia de utilidades de seguridad
+security = SecurityUtils()
 
 # Rutas de autenticación
 @sqlite_api_bp.route('/login', methods=['POST'])

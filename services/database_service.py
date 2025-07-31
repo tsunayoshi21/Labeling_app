@@ -1,21 +1,21 @@
 """
 Servicio de base de datos para la aplicación de anotación colaborativa
 """
+import logging
 from datetime import datetime
 from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
 from models.database import DatabaseManager, User, Image, Annotation
 
+# Configurar logger para este módulo
+logger = logging.getLogger(__name__)
+
 class DatabaseService:
-    """Servicio para operaciones de base                    annotation.user_id = user_id
-                    annotation.image_id = image.id
-                    annotation.status = 'pending'
-                    annotation.updated_at = datetime.now()
-                    session.add(annotation)
-                    assignments_created += 1tos"""
+    """Servicio para operaciones de base de datos"""
     
     def __init__(self, database_url='sqlite:///labeling_app.db'):
         self.db_manager = DatabaseManager(database_url)
+        logger.info(f"DatabaseService inicializado con URL: {database_url}")
         
     def get_session(self) -> Session:
         """Obtiene una sesión de base de datos"""
@@ -28,19 +28,18 @@ class DatabaseService:
         try:
             user = session.query(User).filter_by(username=username).first()
             if user and user.check_password(password):
-                # Crear una nueva instancia desvinculada de la sesión usando dict
-                user_dict = {
-                    'id': user.id,
-                    'username': user.username,
-                    'password_hash': user.password_hash,
-                    'role': user.role
-                }
-                # Crear instancia temporal con valores dummy para el constructor
+                logger.info(f"Usuario autenticado exitosamente: {username}")
+                # Crear una nueva instancia desvinculada de la sesión
                 detached_user = User(username=user.username, password='dummy', role=user.role)
                 # Sobrescribir con los valores reales
                 detached_user.id = user.id
                 detached_user.password_hash = user.password_hash
                 return detached_user
+            else:
+                logger.warning(f"Fallo de autenticación para usuario: {username}")
+                return None
+        except Exception as e:
+            logger.error(f"Error autenticando usuario {username}: {e}")
             return None
         finally:
             session.close()
@@ -51,12 +50,18 @@ class DatabaseService:
         try:
             user = session.query(User).filter_by(id=user_id).first()
             if user:
+                logger.debug(f"Usuario encontrado por ID: {user_id}")
                 # Crear una nueva instancia desvinculada de la sesión
                 detached_user = User(username=user.username, password='dummy', role=user.role)
                 # Sobrescribir con los valores reales
                 detached_user.id = user.id
                 detached_user.password_hash = user.password_hash
                 return detached_user
+            else:
+                logger.warning(f"Usuario no encontrado por ID: {user_id}")
+                return None
+        except Exception as e:
+            logger.error(f"Error obteniendo usuario por ID {user_id}: {e}")
             return None
         finally:
             session.close()
@@ -593,5 +598,38 @@ class DatabaseService:
         except Exception as e:
             print(f"Error in get_recent_user_activity: {e}")
             return []
+        finally:
+            session.close()
+    
+    def get_all_images_with_annotations(self) -> List[dict]:
+        """Obtiene todas las imágenes con información de sus anotaciones"""
+        session = self.get_session()
+        try:
+            from sqlalchemy import func, case
+            
+            # Obtener imágenes con estadísticas de anotaciones
+            images_query = session.query(
+                Image,
+                func.count(Annotation.id).label('total_annotations'),
+                func.sum(case((Annotation.status == 'pending', 1), else_=0)).label('pending'),
+                func.sum(case((Annotation.status == 'corrected', 1), else_=0)).label('corrected'),
+                func.sum(case((Annotation.status == 'approved', 1), else_=0)).label('approved'),
+                func.sum(case((Annotation.status == 'discarded', 1), else_=0)).label('discarded')
+            ).outerjoin(Annotation).group_by(Image.id).all()
+            
+            result = []
+            for image, total_annotations, pending, corrected, approved, discarded in images_query:
+                result.append({
+                    'id': image.id,
+                    'image_path': image.image_path,
+                    'initial_ocr_text': image.initial_ocr_text[:100] + '...' if len(image.initial_ocr_text) > 100 else image.initial_ocr_text,
+                    'total_annotations': total_annotations or 0,
+                    'pending': pending or 0,
+                    'corrected': corrected or 0,
+                    'approved': approved or 0,
+                    'discarded': discarded or 0
+                })
+            
+            return result
         finally:
             session.close()

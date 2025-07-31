@@ -1,9 +1,121 @@
-// JavaScript para la interfaz principal de anotación SQLite (similar a la versión original)
+// JavaScript para la interfaz principal de anotación SQLite con JWT Auth
 
-// API Service - Maneja todas las llamadas al backend
+// JWT Service - Maneja tokens de autenticación
+class JWTService {
+    static TOKEN_KEY = 'access_token';
+    static REFRESH_TOKEN_KEY = 'refresh_token';
+    static USER_KEY = 'current_user';
+
+    static getToken() {
+        return localStorage.getItem(this.TOKEN_KEY);
+    }
+
+    static getRefreshToken() {
+        return localStorage.getItem(this.REFRESH_TOKEN_KEY);
+    }
+
+    static setTokens(accessToken, refreshToken) {
+        localStorage.setItem(this.TOKEN_KEY, accessToken);
+        if (refreshToken) {
+            localStorage.setItem(this.REFRESH_TOKEN_KEY, refreshToken);
+        }
+    }
+
+    static clearTokens() {
+        localStorage.removeItem(this.TOKEN_KEY);
+        localStorage.removeItem(this.REFRESH_TOKEN_KEY);
+        localStorage.removeItem(this.USER_KEY);
+    }
+
+    static setUser(user) {
+        localStorage.setItem(this.USER_KEY, JSON.stringify(user));
+    }
+
+    static getUser() {
+        const user = localStorage.getItem(this.USER_KEY);
+        return user ? JSON.parse(user) : null;
+    }
+
+    static isAuthenticated() {
+        return !!this.getToken();
+    }
+
+    static async refreshToken() {
+        const refreshToken = this.getRefreshToken();
+        if (!refreshToken) {
+            throw new Error('No refresh token available');
+        }
+
+        const response = await fetch('/api/v2/refresh', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ refresh_token: refreshToken })
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            this.setTokens(data.access_token, data.refresh_token);
+            return data.access_token;
+        } else {
+            this.clearTokens();
+            throw new Error('Token refresh failed');
+        }
+    }
+
+    static getAuthHeaders() {
+        const token = this.getToken();
+        if (token) {
+            return {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            };
+        }
+        return { 'Content-Type': 'application/json' };
+    }
+}
+
+// API Service - Maneja todas las llamadas al backend con JWT
 class APIService {
+    static async makeRequest(url, options = {}) {
+        // Agregar headers de autenticación
+        options.headers = {
+            ...options.headers,
+            ...JWTService.getAuthHeaders()
+        };
+
+        let response = await fetch(url, options);
+
+        // Si el token expiró, intentar renovarlo
+        if (response.status === 401 && JWTService.getRefreshToken()) {
+            try {
+                await JWTService.refreshToken();
+                // Reintentar la request con el nuevo token
+                options.headers = {
+                    ...options.headers,
+                    ...JWTService.getAuthHeaders()
+                };
+                response = await fetch(url, options);
+            } catch (error) {
+                // Refresh falló, redirigir a login
+                window.location.href = '/login';
+                return;
+            }
+        }
+
+        // Si aún no está autorizado, redirigir a login
+        if (response.status === 401) {
+            JWTService.clearTokens();
+            window.location.href = '/login';
+            return;
+        }
+
+        return response;
+    }
+
     static async getCurrentTask() {
-        const response = await fetch('/api/v2/task/next');
+        const response = await this.makeRequest('/api/v2/task/next');
         if (response.status === 204) {
             return { completed: true };
         }
@@ -11,17 +123,17 @@ class APIService {
     }
 
     static async getTaskHistory(limit = 10) {
-        const response = await fetch(`/api/v2/task/history?limit=${limit}`);
+        const response = await this.makeRequest(`/api/v2/task/history?limit=${limit}`);
         return await response.json();
     }
 
     static async getPendingPreview(limit = 10) {
-        const response = await fetch(`/api/v2/task/pending-preview?limit=${limit}`);
+        const response = await this.makeRequest(`/api/v2/task/pending-preview?limit=${limit}`);
         return await response.json();
     }
 
     static async loadSpecificTask(annotationId) {
-        const response = await fetch(`/api/v2/task/load/${annotationId}`);
+        const response = await this.makeRequest(`/api/v2/task/load/${annotationId}`);
         if (response.ok) {
             return await response.json();
         }
@@ -34,7 +146,7 @@ class APIService {
             payload.corrected_text = correctedText;
         }
 
-        const response = await fetch(`/api/v2/annotations/${annotationId}`, {
+        const response = await this.makeRequest(`/api/v2/annotations/${annotationId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -43,19 +155,23 @@ class APIService {
     }
 
     static async getUserStats() {
-        const response = await fetch('/api/v2/stats');
+        const response = await this.makeRequest('/api/v2/stats');
         return await response.json();
     }
 
     static async getUserInfo() {
-        const response = await fetch('/api/v2/me');
+        const response = await this.makeRequest('/api/v2/me');
         return await response.json();
     }
 
     static async logout() {
-        const response = await fetch('/api/v2/logout', {
+        const response = await this.makeRequest('/api/v2/logout', {
             method: 'POST'
         });
+        
+        // Limpiar tokens locales
+        JWTService.clearTokens();
+        
         return response.ok;
     }
 }
@@ -322,6 +438,7 @@ class KeyboardHandler {
 }
 
 // App Controller - Controlador principal de la aplicación
+// App Controller - Controlador principal de la aplicación con JWT
 class AppController {
     constructor() {
         this.currentTask = null;
@@ -338,19 +455,45 @@ class AppController {
     }
 
     async init() {
-        await this.loadUserInfo();
-        await this.updateStats();
-        await this.loadTaskHistory(); // Cargar historial primero
-        await this.loadCurrentTask();
-        await this.updatePendingPreview();
-        this.setupEventListeners();
+        // Verificar autenticación JWT
+        if (!JWTService.isAuthenticated()) {
+            window.location.href = '/login';
+            return;
+        }
+
+        try {
+            await this.loadUserInfo();
+            await this.updateStats();
+            await this.loadTaskHistory(); // Cargar historial primero
+            await this.loadCurrentTask();
+            await this.updatePendingPreview();
+            this.setupEventListeners();
+        } catch (error) {
+            console.error('Error initializing app:', error);
+            // Si hay error de autenticación, redirigir a login
+            if (error.message.includes('401') || error.message.includes('Token')) {
+                JWTService.clearTokens();
+                window.location.href = '/login';
+            }
+        }
     }
 
     async loadUserInfo() {
         try {
+            // Primero intentar obtener del localStorage
+            const cachedUser = JWTService.getUser();
+            if (cachedUser) {
+                this.currentUser = cachedUser;
+                document.getElementById('user-name').textContent = 
+                    `${cachedUser.username} (${cachedUser.role})`;
+                this.showAdminButtonIfNeeded();
+            }
+
+            // Luego verificar con el servidor
             const data = await APIService.getUserInfo();
             if (data.user) {
-                this.currentUser = data.user; // Almacenar información del usuario
+                this.currentUser = data.user;
+                JWTService.setUser(data.user); // Actualizar cache
                 document.getElementById('user-name').textContent = 
                     `${data.user.username} (${data.user.role})`;
                 
@@ -359,6 +502,7 @@ class AppController {
             }
         } catch (error) {
             console.error('Error loading user info:', error);
+            throw error;
         }
     }
 
@@ -836,11 +980,12 @@ class AppController {
     async logout() {
         try {
             const success = await APIService.logout();
-            if (success) {
-                window.location.href = '/login';
-            }
+            // Los tokens ya se limpian en APIService.logout()
+            window.location.href = '/login';
         } catch (error) {
             console.error('Error logging out:', error);
+            // Limpiar tokens localmente en caso de error
+            JWTService.clearTokens();
             window.location.href = '/login';
         }
     }
