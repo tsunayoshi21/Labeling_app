@@ -49,3 +49,4 @@ nohup.out
 # Temporary files
 *.tmp
 *.temp
+ngrok
