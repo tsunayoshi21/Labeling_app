@@ -338,7 +338,7 @@ class AdminPanel {
         const userId = document.getElementById('auto-user-select').value;
         const count = parseInt(document.getElementById('auto-count').value);
         const priorityUnannotated = document.querySelector('input[name="priority"]:checked').value === 'unannotated';
-
+        
         if (!userId) {
             alert('Por favor selecciona un usuario');
             return;
@@ -364,7 +364,7 @@ class AdminPanel {
                 const resultDiv = document.getElementById('auto-assignment-result');
                 resultDiv.innerHTML = `
                     <div class="message success">
-                        ${result.message}. Se crearon ${result.assignments_created} asignaciones.
+                        ${result.message}.
                     </div>
                 `;
                 
