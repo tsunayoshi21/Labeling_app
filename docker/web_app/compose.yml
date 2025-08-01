@@ -1,0 +1,16 @@
+services:
+  web_app:
+    container_name: web_app
+    command: python app_sqlite.py
+    build:
+      context: .
+    image: web_app
+    env_file:
+    - ./../../envs/web_app.env
+    environment:
+    - XDG_RUNTIME_DIR=/tmp
+    - ANONYMIZED_TELEMETRY=FALSE
+    volumes:
+    - ./../../src:/app
+    ports:
+    - "8080:8080"
