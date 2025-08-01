@@ -9,10 +9,10 @@ import logging
 sys.path.insert(0, os.path.dirname(__file__))
 
 # Importar la aplicación
-from app_sqlite import create_sqlite_app
+from app import create_app
 
 # Crear la aplicación Flask
-app, config = create_sqlite_app()
+app, config = create_app()
 
 # Configurar logging para WSGI/Gunicorn
 if __name__ != "__main__":

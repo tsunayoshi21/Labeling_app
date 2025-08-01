@@ -5,13 +5,13 @@ from flask import Flask, render_template, send_from_directory, session
 import os
 import logging
 from config import Config
-from routes.sqlite_api_routes_jwt import sqlite_api_bp  # Cambiado a JWT
+from routes.sqlite_api_routes_jwt import api_bp  # Cambiado a JWT
 from models.database import DatabaseManager
 
 # Configurar logger para este módulo
 logger = logging.getLogger(__name__)
 
-def create_sqlite_app():
+def create_app():
     """Factory para crear la aplicación Flask con SQLite y JWT"""
     app = Flask(__name__)
     
@@ -33,13 +33,13 @@ def create_sqlite_app():
     
     # Inicializar base de datos
     logger.info("Inicializando base de datos")
-    db_manager = DatabaseManager()
+    db_manager = DatabaseManager(config.DATABASE_URL)
     db_manager.create_tables()
     db_manager.init_admin_user()
     logger.info("Base de datos inicializada correctamente")
     
     # Registrar blueprints
-    app.register_blueprint(sqlite_api_bp)
+    app.register_blueprint(api_bp)
     logger.debug("Blueprint de API registrado")
     
     # Rutas principales
@@ -105,7 +105,7 @@ def create_sqlite_app():
 if __name__ == '__main__':
     try:
         logger.info("Iniciando aplicación desde main")
-        app, config = create_sqlite_app()
+        app, config = create_app()
         logger.info(f"Ejecutando servidor en {config.HOST}:{config.PORT} (debug={config.DEBUG})")
         app.run(
             debug=config.DEBUG, 

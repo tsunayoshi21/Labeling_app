@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 URL_API_PREFIX = '/api/v2'
 
 # Blueprint para las rutas de la aplicación SQLite
-sqlite_api_bp = Blueprint('sqlite_api', __name__, url_prefix=URL_API_PREFIX)
+api_bp = Blueprint('api', __name__, url_prefix=URL_API_PREFIX)
 
 # Instancia del servicio de base de datos
 db_service = DatabaseService()
@@ -23,7 +23,7 @@ db_service = DatabaseService()
 security = SecurityUtils()
 
 # Rutas de autenticación
-@sqlite_api_bp.route('/login', methods=['POST'])
+@api_bp.route('/login', methods=['POST'])
 @rate_limit(max_requests=5, window_seconds=60)  # Máximo 5 intentos por minuto
 @validate_json_input(required_fields=['username', 'password'])
 def login():
@@ -65,7 +65,7 @@ def login():
         logger.error(f"Error interno en login: {e}")
         return jsonify({'error': 'Authentication failed'}), 500
 
-@sqlite_api_bp.route('/logout', methods=['POST'])
+@api_bp.route('/logout', methods=['POST'])
 @jwt_required
 def logout():
     """Cerrar sesión (con JWT simplemente eliminamos el token del cliente)"""
@@ -73,7 +73,7 @@ def logout():
     logger.info(f"Logout exitoso para usuario: {username}")
     return jsonify({'success': True, 'message': 'Logged out successfully'})
 
-@sqlite_api_bp.route('/refresh', methods=['POST'])
+@api_bp.route('/refresh', methods=['POST'])
 @rate_limit(max_requests=10, window_seconds=60)
 @validate_json_input(required_fields=['refresh_token'])
 def refresh_token():
@@ -110,7 +110,7 @@ def refresh_token():
         logger.error(f"Error interno renovando token: {e}")
         return jsonify({'error': 'Token refresh failed'}), 500
 
-@sqlite_api_bp.route('/me', methods=['GET'])
+@api_bp.route('/me', methods=['GET'])
 @jwt_required
 def get_current_user():
     """Obtiene información del usuario actual"""
@@ -132,7 +132,7 @@ def get_current_user():
     return jsonify({'error': 'User not found'}), 404
 
 # Rutas para tareas (anotaciones)
-@sqlite_api_bp.route('/task/next', methods=['GET'])
+@api_bp.route('/task/next', methods=['GET'])
 @jwt_required
 def get_next_task():
     """Obtiene la siguiente tarea pendiente para el usuario actual"""
@@ -157,7 +157,7 @@ def get_next_task():
         logger.info(f"No hay tareas pendientes para usuario: {username}")
         return jsonify({'message': 'No pending tasks available'}), 204
 
-@sqlite_api_bp.route('/task/history', methods=['GET'])
+@api_bp.route('/task/history', methods=['GET'])
 @jwt_required
 def get_task_history():
     """Obtiene el historial de tareas completadas del usuario (últimas 10)"""
@@ -183,7 +183,7 @@ def get_task_history():
         } for annotation, image in history]
     })
 
-@sqlite_api_bp.route('/task/pending-preview', methods=['GET'])
+@api_bp.route('/task/pending-preview', methods=['GET'])
 @jwt_required
 def get_pending_preview():
     """Obtiene una vista previa de las próximas tareas pendientes (máximo 10)"""
@@ -204,7 +204,7 @@ def get_pending_preview():
         } for annotation, image in pending_tasks]
     })
 
-@sqlite_api_bp.route('/task/load/<int:annotation_id>', methods=['GET'])
+@api_bp.route('/task/load/<int:annotation_id>', methods=['GET'])
 @jwt_required
 def load_specific_task(annotation_id):
     """Carga una tarea específica por annotation_id"""
@@ -230,7 +230,7 @@ def load_specific_task(annotation_id):
         logger.warning(f"Tarea específica no encontrada: {annotation_id} para usuario {username}")
         return jsonify({'error': 'Task not found'}), 404
 
-@sqlite_api_bp.route('/annotations/<int:annotation_id>', methods=['PUT'])
+@api_bp.route('/annotations/<int:annotation_id>', methods=['PUT'])
 @jwt_required
 @validate_json_input(required_fields=['status'], optional_fields=['corrected_text'])
 def update_annotation(annotation_id):
@@ -275,7 +275,7 @@ def update_annotation(annotation_id):
         logger.error(f"Error interno actualizando anotación {annotation_id}: {e}")
         return jsonify({'error': 'Failed to update annotation'}), 500
 
-@sqlite_api_bp.route('/annotations/<int:annotation_id>', methods=['GET'])
+@api_bp.route('/annotations/<int:annotation_id>', methods=['GET'])
 @jwt_required
 def get_annotation(annotation_id):
     """Obtiene una anotación específica"""
@@ -303,7 +303,7 @@ def get_annotation(annotation_id):
         return jsonify({'error': 'Annotation not found'}), 404
 
 # Rutas de administración
-@sqlite_api_bp.route('/admin/assignments', methods=['POST'])
+@api_bp.route('/admin/assignments', methods=['POST'])
 @admin_required
 @validate_json_input(required_fields=['user_ids', 'image_ids'])
 def create_assignments():
@@ -337,7 +337,7 @@ def create_assignments():
         logger.error(f"Error creando asignaciones para admin {admin_username}: {e}")
         return jsonify({'error': str(e)}), 500
 
-@sqlite_api_bp.route('/admin/assignments/auto', methods=['POST'])
+@api_bp.route('/admin/assignments/auto', methods=['POST'])
 @admin_required
 @validate_json_input(required_fields=['count', 'priority_unannotated'], optional_fields=['user_id'])
 def create_auto_assignments():
@@ -374,7 +374,7 @@ def create_auto_assignments():
         logger.error(f"Error creando asignaciones automáticas para admin {admin_username}: {e}")
         return jsonify({'error': 'Failed to create auto assignments'}), 500
 
-@sqlite_api_bp.route('/admin/images/<int:image_id>/annotations', methods=['GET'])
+@api_bp.route('/admin/images/<int:image_id>/annotations', methods=['GET'])
 @admin_required
 def get_image_annotations(image_id):
     """Obtiene todas las anotaciones de una imagen específica"""
@@ -397,7 +397,7 @@ def get_image_annotations(image_id):
         } for ann in annotations]
     })
 
-@sqlite_api_bp.route('/admin/images', methods=['GET'])
+@api_bp.route('/admin/images', methods=['GET'])
 @admin_required
 def get_all_images():
     """Obtiene todas las imágenes con información de anotaciones"""
@@ -413,7 +413,7 @@ def get_all_images():
         'images': images  # Ya viene formateado como lista de diccionarios
     })
 
-@sqlite_api_bp.route('/admin/users', methods=['GET'])
+@api_bp.route('/admin/users', methods=['GET'])
 @admin_required
 def get_all_users():
     """Obtiene todos los usuarios"""
@@ -429,7 +429,7 @@ def get_all_users():
         'users': [user.to_dict() for user in users]
     })
 
-@sqlite_api_bp.route('/admin/users', methods=['POST'])
+@api_bp.route('/admin/users', methods=['POST'])
 @admin_required
 @validate_json_input(required_fields=['username', 'password'], optional_fields=['role'])
 def create_user():
@@ -476,7 +476,7 @@ def create_user():
         logger.error(f"Error interno creando usuario para admin {admin_username}: {e}")
         return jsonify({'error': 'Failed to create user'}), 500
 
-@sqlite_api_bp.route('/admin/images', methods=['POST'])
+@api_bp.route('/admin/images', methods=['POST'])
 @admin_required
 @validate_json_input(required_fields=['image_path', 'initial_ocr_text'])
 def create_image():
@@ -507,7 +507,7 @@ def create_image():
         logger.error(f"Error interno creando imagen para admin {admin_username}: {e}")
         return jsonify({'error': 'Failed to create image'}), 500
 
-@sqlite_api_bp.route('/admin/recent-activity', methods=['GET'])
+@api_bp.route('/admin/recent-activity', methods=['GET'])
 @admin_required
 def get_recent_activity():
     """Obtiene actividad reciente de usuarios"""
@@ -525,7 +525,7 @@ def get_recent_activity():
     })
 
 # Rutas de estadísticas
-@sqlite_api_bp.route('/admin/stats', methods=['GET'])
+@api_bp.route('/admin/stats', methods=['GET'])
 @admin_required
 def get_general_stats():
     """Obtiene estadísticas generales del sistema"""
@@ -539,7 +539,7 @@ def get_general_stats():
     
     return jsonify(stats)
 
-@sqlite_api_bp.route('/stats', methods=['GET'])
+@api_bp.route('/stats', methods=['GET'])
 @jwt_required
 def get_user_stats():
     """Obtiene estadísticas del usuario actual"""
@@ -555,7 +555,7 @@ def get_user_stats():
     return jsonify(stats)
 
 # Endpoint para análisis de rendimiento (solo para desarrollo)
-@sqlite_api_bp.route('/dev/performance', methods=['GET'])
+@api_bp.route('/dev/performance', methods=['GET'])
 @jwt_required
 def analyze_performance():
     """Analiza el rendimiento de endpoints críticos"""
@@ -594,7 +594,7 @@ def analyze_performance():
         return jsonify({'error': str(e)}), 500
 
 # Diagnóstico JWT (solo para desarrollo)
-@sqlite_api_bp.route('/debug/auth', methods=['GET'])
+@api_bp.route('/debug/auth', methods=['GET'])
 @jwt_required
 def debug_auth():
     """Endpoint de diagnóstico para verificar autenticación JWT"""
@@ -607,7 +607,7 @@ def debug_auth():
         'message': 'JWT authentication working'
     })
 
-@sqlite_api_bp.route('/debug/admin', methods=['GET'])
+@api_bp.route('/debug/admin', methods=['GET'])
 @admin_required
 def debug_admin():
     """Endpoint de diagnóstico para verificar autorización admin"""
@@ -622,16 +622,16 @@ def debug_admin():
     })
 
 # Manejo de errores
-@sqlite_api_bp.errorhandler(404)
+@api_bp.errorhandler(404)
 def not_found(error):
     logger.warning(f"Recurso no encontrado: {error}")
     return jsonify({'error': 'Resource not found'}), 404
 
-@sqlite_api_bp.errorhandler(500)
+@api_bp.errorhandler(500)
 def internal_error(error):
     logger.error(f"Error interno del servidor: {error}")
     return jsonify({'error': 'Internal server error'}), 500
 
-@sqlite_api_bp.errorhandler(429)
+@api_bp.errorhandler(429)
 def rate_limit_exceeded(error):
     return jsonify({'error': 'Rate limit exceeded. Please try again later.'}), 429

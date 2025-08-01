@@ -1,3 +1,4 @@
 include:
   - ./docker/web_app/compose.yml
-#  - ./docker/db/compose.yml
+  - ./docker/postgres/compose.yml
+  - ./docker/pgadmin/compose.yml

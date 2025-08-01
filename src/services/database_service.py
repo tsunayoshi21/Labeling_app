@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
 from models.database import DatabaseManager, User, Image, Annotation
+import os
 
 # Configurar logger para este módulo
 logger = logging.getLogger(__name__)
@@ -13,7 +14,9 @@ logger = logging.getLogger(__name__)
 class DatabaseService:
     """Servicio para operaciones de base de datos"""
     
-    def __init__(self, database_url='sqlite:///labeling_app.db'):
+    def __init__(self, database_url=None):
+        if database_url is None:
+            database_url = os.getenv("DATABASE_URL", "sqlite:///labeling_app.db")
         self.db_manager = DatabaseManager(database_url)
         logger.info(f"DatabaseService inicializado con URL: {database_url}")
         

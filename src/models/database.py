@@ -6,6 +6,7 @@ from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, F
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from werkzeug.security import generate_password_hash, check_password_hash
+import os
 
 Base = declarative_base()
 
@@ -128,7 +129,9 @@ class Annotation(Base):
 class DatabaseManager:
     """Manejador de la base de datos"""
     
-    def __init__(self, database_url='sqlite:///labeling_app.db'):
+    def __init__(self, database_url=None):
+        if database_url is None:
+            database_url = os.getenv("DATABASE_URL", "sqlite:///labeling_app.db")
         self.engine = create_engine(database_url, echo=False)
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
         

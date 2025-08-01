@@ -1,7 +1,7 @@
 services:
   web_app:
     container_name: web_app
-    command: python app_sqlite.py
+    command: python app.py
     build:
       context: .
     image: web_app
@@ -14,3 +14,6 @@ services:
     - ./../../src:/app
     ports:
     - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
