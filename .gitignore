@@ -50,3 +50,4 @@ nohup.out
 *.tmp
 *.temp
 ngrok
+.env
