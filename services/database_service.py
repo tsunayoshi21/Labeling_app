@@ -288,32 +288,33 @@ class DatabaseService:
             assignments_created = 0
             
             if priority_unannotated:
-                # Priorizar imágenes que nadie ha anotado
-                subquery = session.query(Annotation.image_id).subquery()
+
+                # Subconsulta: todos los image_id que están en Annotation, excepto los del admin con status 'pending'
+                excluded_image_ids = session.query(Annotation.image_id).filter(
+                    ~((Annotation.user_id == 1) & (Annotation.status == 'pending'))
+                )
+
+                # Consulta principal: dame solo imágenes cuyo id NO está en la subconsulta anterior
                 available_images = session.query(Image).filter(
-                    ~Image.id.in_(session.query(subquery.c.image_id))
+                    ~Image.id.in_(excluded_image_ids)
                 ).order_by(func.random()).limit(count).all()
+
                 
-                # Si no hay suficientes imágenes sin anotar, completar con imágenes ya anotadas
-                if len(available_images) < count:
-                    remaining = count - len(available_images)
-                    used_image_ids = [img.id for img in available_images]
-                    
-                    # Obtener imágenes ya anotadas que no están asignadas a este usuario
-                    additional_images = session.query(Image).filter(
-                        ~Image.id.in_(used_image_ids),
-                        ~Image.id.in_(
-                            session.query(Annotation.image_id).filter_by(user_id=user_id)
-                        )
-                    ).order_by(func.random()).limit(remaining).all()
-                    
-                    available_images.extend(additional_images)
             else:
-                # Obtener imágenes random que no estén ya asignadas a este usuario
+                # Subconsulta: IDs de imágenes que el usuario actual ya tiene asignadas
+                user_image_ids = session.query(Annotation.image_id).filter(
+                    Annotation.user_id == user_id
+                )
+
+                # Subconsulta: IDs de imágenes que el admin ha anotado con estado distinto a 'pending'
+                admin_image_ids = session.query(Annotation.image_id).filter(
+                    (Annotation.user_id == 1) & (Annotation.status != 'pending')
+                )
+
+                # Consulta final: imágenes que están en la lista del admin, pero NO en la del usuario actual
                 available_images = session.query(Image).filter(
-                    ~Image.id.in_(
-                        session.query(Annotation.image_id).filter_by(user_id=user_id)
-                    )
+                    Image.id.in_(admin_image_ids),
+                    ~Image.id.in_(user_image_ids)
                 ).order_by(func.random()).limit(count).all()
             
             # Crear las asignaciones
