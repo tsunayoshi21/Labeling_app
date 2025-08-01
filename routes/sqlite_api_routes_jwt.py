@@ -346,6 +346,7 @@ def create_auto_assignments():
     try:
         count = int(data['count'])
         user_id = data.get('user_id')
+        priority_unannotated = data.get('priority_unannotated', True)
         
         logger.info(f"Admin {admin_username} creando {count} asignaciones automáticas" + 
                    (f" para usuario {user_id}" if user_id else ""))
@@ -354,7 +355,7 @@ def create_auto_assignments():
             logger.warning(f"Admin {admin_username} intentó crear {count} asignaciones (fuera de rango)")
             return jsonify({'error': 'Count must be between 1 and 1000'}), 400
         
-        assignments = db_service.create_auto_assignments(count, user_id)
+        assignments = db_service.assign_random_tasks(user_id, count, priority_unannotated)
         
         logger.info(f"Admin {admin_username} creó {assignments} asignaciones automáticas exitosamente")
         
@@ -388,7 +389,6 @@ def get_image_annotations(image_id):
         'annotations': [{
             'id': ann.id,
             'user_id': ann.user_id,
-            'username': ann.user.username,
             'status': ann.status,
             'corrected_text': ann.corrected_text,
             'updated_at': ann.updated_at.isoformat() if ann.updated_at else None
