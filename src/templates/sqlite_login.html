@@ -165,64 +165,7 @@
         </div>
     </div>
 
-    <script>
-        document.getElementById('login-form').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
-            const loginBtn = document.getElementById('login-btn');
-            const errorDiv = document.getElementById('error-message');
-            const successDiv = document.getElementById('success-message');
-            
-            // Limpiar mensajes anteriores
-            errorDiv.style.display = 'none';
-            successDiv.style.display = 'none';
-            
-            // Deshabilitar botón
-            loginBtn.disabled = true;
-            loginBtn.textContent = 'Iniciando sesión...';
-            
-            try {
-                const response = await fetch('/api/v2/login', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ username, password })
-                });
-                
-                const data = await response.json();
-                
-                if (response.ok && data.success) {
-                    // Guardar tokens JWT
-                    localStorage.setItem('access_token', data.access_token);
-                    localStorage.setItem('refresh_token', data.refresh_token);
-                    localStorage.setItem('current_user', JSON.stringify(data.user));
-                    
-                    successDiv.textContent = 'Inicio de sesión exitoso. Redirigiendo...';
-                    successDiv.style.display = 'block';
-                    
-                    // Redirigir según el rol
-                    setTimeout(() => {
-                        if (data.user.role === 'admin') {
-                            window.location.href = '/admin';
-                        } else {
-                            window.location.href = '/';
-                        }
-                    }, 1000);
-                } else {
-                    errorDiv.textContent = data.error || 'Error en el inicio de sesión';
-                    errorDiv.style.display = 'block';
-                }
-            } catch (error) {
-                errorDiv.textContent = 'Error de conexión. Inténtalo de nuevo.';
-                errorDiv.style.display = 'block';
-            } finally {
-                loginBtn.disabled = false;
-                loginBtn.textContent = 'Iniciar Sesión';
-            }
-        });
-    </script>
+    <!-- JavaScript externo para funcionalidad de login -->
+    <script src="{{ url_for('static', filename='js/sqlite_login.js') }}"></script>
 </body>
 </html>

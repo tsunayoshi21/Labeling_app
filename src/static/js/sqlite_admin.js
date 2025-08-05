@@ -1,5 +1,56 @@
 // JavaScript para el panel de administración con JWT Auth
 
+// ========== FUNCIONES DE AUTENTICACIÓN ==========
+
+// Función para limpiar autenticación
+function clearAuth() {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('current_user');
+    // Limpiar cookie
+    document.cookie = 'access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+}
+
+// Verificar autenticación JWT al cargar la página
+function checkJWTAuth() {
+    const accessToken = localStorage.getItem('access_token');
+    const currentUser = localStorage.getItem('current_user');
+    
+    if (!accessToken || !currentUser) {
+        console.log('No se encontraron tokens JWT, redirigiendo a login');
+        clearAuth(); // Limpiar todo por si acaso
+        window.location.href = '/login';
+        return false;
+    }
+    
+    try {
+        const user = JSON.parse(currentUser);
+        console.log('Usuario autenticado:', user.username);
+        
+        // Verificar que sea admin
+        if (user.role !== 'admin') {
+            console.log('Usuario no es admin, redirigiendo');
+            window.location.href = '/';
+            return false;
+        }
+        
+        // Actualizar información del usuario en el header
+        const userInfoElement = document.querySelector('.user-info span');
+        if (userInfoElement) {
+            userInfoElement.textContent = `👤 ${user.username} (${user.role})`;
+        }
+        
+        return true;
+    } catch (error) {
+        console.error('Error parseando datos de usuario:', error);
+        clearAuth();
+        window.location.href = '/login';
+        return false;
+    }
+}
+
+// ========== CLASES PRINCIPALES ==========
+
 // Importar servicios JWT del archivo principal
 // (En un entorno de producción usaríamos módulos ES6)
 
@@ -10,11 +61,10 @@ class AdminPanel {
     }
 
     checkAuthentication() {
-        // Verificar si tenemos token JWT
+        // La verificación principal ya se hizo en checkJWTAuth()
+        // Solo verificamos que tengamos token para las requests
         const token = localStorage.getItem('access_token');
-        const user = JSON.parse(localStorage.getItem('current_user') || '{}');
-        
-        if (!token || user.role !== 'admin') {
+        if (!token) {
             window.location.href = '/login';
             return;
         }
@@ -480,7 +530,15 @@ class AdminPanel {
 }
 
 // Instanciar el panel de administración
-const adminPanel = new AdminPanel();
+let adminPanel;
+
+// Verificar autenticación al cargar la página y luego inicializar
+document.addEventListener('DOMContentLoaded', function() {
+    if (checkJWTAuth()) {
+        adminPanel = new AdminPanel();
+    }
+    // Si checkJWTAuth() retorna false, ya redirigió a login
+});
 
 // Funciones globales
 function showTab(tabName) {
@@ -549,18 +607,14 @@ async function logout() {
             });
         }
         
-        // Limpiar tokens locales
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        localStorage.removeItem('current_user');
+        // Limpiar tokens locales usando la función centralizada
+        clearAuth();
         
         window.location.href = '/login';
     } catch (error) {
         console.error('Error logging out:', error);
         // Limpiar tokens locales en caso de error
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        localStorage.removeItem('current_user');
+        clearAuth();
         window.location.href = '/login';
     }
 }

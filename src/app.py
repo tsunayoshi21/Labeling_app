@@ -1,7 +1,7 @@
 """
 Aplicación Flask con SQLite para anotación colaborativa con JWT Auth
 """
-from flask import Flask, render_template, send_from_directory, session
+from flask import Flask, render_template, send_from_directory, session, redirect, request
 import os
 import logging
 from config import Config
@@ -17,20 +17,42 @@ def create_app():
     
     # Cargar configuración
     config = Config.from_env()
+
+    # Validar configuración en producción
+    if config.is_production():
+        config.validate_production_config()
     
+    # Configuración JWT mejorada
+    if config.JWT_SECRET_KEY:
+        app.config['JWT_SECRET_KEY'] = config.JWT_SECRET_KEY
+    else:
+        if config.is_production():
+            raise ValueError("JWT_SECRET_KEY es obligatorio en producción")
+        else:
+            # Solo para desarrollo - generar clave temporal
+            app.config['JWT_SECRET_KEY'] = os.urandom(32).hex()
+            logger.warning("⚠️  Usando JWT_SECRET_KEY temporal para desarrollo")
+    
+    # Flask session secret
+    if config.SECRET_KEY:
+        app.secret_key = config.SECRET_KEY
+    else:
+        if config.is_production():
+            raise ValueError("SECRET_KEY es obligatorio en producción")
+        else:
+            app.secret_key = 'dev-secret-key-change-in-production'
+            logger.warning("⚠️  Usando SECRET_KEY temporal para desarrollo")
+
     # Configurar logging
     config.setup_logging()
     logger.info("Iniciando aplicación Flask con JWT Auth")
     
     # Configuración JWT
-    app.config['JWT_SECRET_KEY'] = config.JWT_SECRET_KEY or os.urandom(32).hex()
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = config.JWT_ACCESS_TOKEN_EXPIRES
     app.config['JWT_REFRESH_TOKEN_EXPIRES'] = config.JWT_REFRESH_TOKEN_EXPIRES
     logger.debug(f"JWT configurado - Access token: {config.JWT_ACCESS_TOKEN_EXPIRES}min, Refresh: {config.JWT_REFRESH_TOKEN_EXPIRES}días")
     
-    # Configuración de sesiones (mantenemos para compatibilidad temporal)
-    app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
-    
+    app.config["DATABASE_URL"] = config.DATABASE_URL  
     # Inicializar base de datos
     logger.info("Inicializando base de datos")
     db_manager = DatabaseManager(config.DATABASE_URL)
@@ -42,42 +64,48 @@ def create_app():
     app.register_blueprint(api_bp)
     logger.debug("Blueprint de API registrado")
     
+    # Importar decoradores de autenticación
+    from services.jwt_service import optional_auth, require_admin, require_auth
+    
     # Rutas principales
     @app.route('/')
+    @require_auth
     def index():
-        """Página principal"""
+        """Página principal - autenticación opcional"""
         logger.debug("Acceso a página principal")
-        if 'user_id' in session:
-            logger.debug(f"Usuario logueado en sesión: {session.get('user_id')}")
-            return render_template('sqlite_index.html')
+        
+        if hasattr(request, 'current_user') and request.current_user:
+            logger.debug(f"Usuario autenticado accediendo a index: {request.current_user.get('username')}")
         else:
-            logger.debug("Usuario no logueado, redirigiendo a login")
-            return render_template('sqlite_login.html')
+            logger.debug("Acceso a index sin autenticación")
+        
+        return render_template('sqlite_index.html')
     
     @app.route('/login')
+    @optional_auth
     def login_page():
-        """Página de login"""
+        """Página de login - redirige si ya está autenticado"""
         logger.debug("Acceso a página de login")
+        
+        # Si ya está autenticado, redirigir según rol
+        if hasattr(request, 'current_user') and request.current_user:
+            user = request.current_user
+            logger.debug(f"Usuario {user.get('username')} ya autenticado, redirigiendo")
+            if user.get('role') == 'admin':
+                return redirect('/admin')
+            else:
+                return redirect('/')
+        
         return render_template('sqlite_login.html')
     
     @app.route('/admin')
+    @require_admin
     def admin_page():
-        """Página de administración"""
+        """Página de administración - REQUIERE AUTENTICACIÓN DE ADMIN"""
         logger.debug("Acceso a página de administración")
-        if 'user_id' not in session:
-            logger.warning("Intento de acceso a admin sin sesión")
-            return render_template('sqlite_login.html')
         
-        # Verificar que sea admin
-        from services.database_service import DatabaseService
-        db_service = DatabaseService()
-        user = db_service.get_user_by_id(session['user_id'])
-        
-        if not user or user.role != 'admin':
-            logger.warning(f"Acceso denegado a admin para usuario {session.get('user_id')} con rol {user.role if user else 'None'}")
-            return "Access denied", 403
-        
-        logger.info(f"Acceso concedido a panel admin para usuario {user.username}")
+        user = request.current_user
+        logger.info(f"Acceso concedido a panel admin para usuario {user.get('username')}")
         return render_template('sqlite_admin.html')
     
     @app.route('/images/<filename>')

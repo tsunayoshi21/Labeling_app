@@ -1,5 +1,49 @@
 // JavaScript para la interfaz principal de anotación SQLite con JWT Auth
 
+// ========== FUNCIONES DE AUTENTICACIÓN ==========
+
+// Función para limpiar autenticación
+function clearAuth() {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('current_user');
+    // Limpiar cookie
+    document.cookie = 'access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+}
+
+// Verificar autenticación JWT al cargar la página
+function checkJWTAuth() {
+    const accessToken = localStorage.getItem('access_token');
+    const currentUser = localStorage.getItem('current_user');
+    
+    if (!accessToken || !currentUser) {
+        console.log('No se encontraron tokens JWT, redirigiendo a login');
+        clearAuth(); // Limpiar todo por si acaso
+        window.location.href = '/login';
+        return false;
+    }
+    
+    try {
+        const user = JSON.parse(currentUser);
+        console.log('Usuario autenticado:', user.username);
+        
+        // Actualizar información del usuario en el header
+        const userInfoElement = document.querySelector('.user-info span');
+        if (userInfoElement) {
+            userInfoElement.textContent = `👤 ${user.username} (${user.role})`;
+        }
+        
+        return true;
+    } catch (error) {
+        console.error('Error parseando datos de usuario:', error);
+        clearAuth();
+        window.location.href = '/login';
+        return false;
+    }
+}
+
+// ========== SERVICIOS JWT Y API ==========
+
 // JWT Service - Maneja tokens de autenticación
 class JWTService {
     static TOKEN_KEY = 'access_token';
@@ -22,9 +66,8 @@ class JWTService {
     }
 
     static clearTokens() {
-        localStorage.removeItem(this.TOKEN_KEY);
-        localStorage.removeItem(this.REFRESH_TOKEN_KEY);
-        localStorage.removeItem(this.USER_KEY);
+        // Usar la función centralizada
+        clearAuth();
     }
 
     static setUser(user) {
@@ -455,12 +498,7 @@ class AppController {
     }
 
     async init() {
-        // Verificar autenticación JWT
-        if (!JWTService.isAuthenticated()) {
-            window.location.href = '/login';
-            return;
-        }
-
+        // La verificación de autenticación ya se hizo en checkJWTAuth()
         try {
             await this.loadUserInfo();
             await this.updateStats();
@@ -1046,5 +1084,9 @@ async function logout() {
 
 // Inicializar la aplicación cuando el DOM esté listo
 document.addEventListener('DOMContentLoaded', function() {
-    window.appController = new AppController();
+    // Verificar autenticación primero, luego inicializar la aplicación
+    if (checkJWTAuth()) {
+        window.appController = new AppController();
+    }
+    // Si checkJWTAuth() retorna false, ya redirigió a login
 });

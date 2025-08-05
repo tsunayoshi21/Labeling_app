@@ -21,9 +21,12 @@ class Config:
     
     # Configuración de seguridad JWT
     JWT_SECRET_KEY: str = None
-    JWT_ACCESS_TOKEN_EXPIRES: int = 480  # minutos (8 horas)
+    JWT_ACCESS_TOKEN_EXPIRES: int = 60  # minutos (1 hora)
     JWT_REFRESH_TOKEN_EXPIRES: int = 30  # días
     
+    # Flask session secret
+    FLASK_ENV: str = "development"  # development, production
+    SECRET_KEY: str = None
     # Configuración de logging
     LOG_PATH: str = "logs/"
     LOG_LEVEL: str = "DEBUG"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
@@ -31,7 +34,10 @@ class Config:
     LOG_FILE: str = os.path.join(LOG_PATH, "app.log")
     LOG_MAX_BYTES: int = 10 * 1024 * 1024  # 10MB
     LOG_BACKUP_COUNT: int = 5
-    
+
+    # DB Configuración
+    DATABASE_URL: str = "sqlite:///labeling_app.db"
+
     @classmethod
     def from_env(cls):
         """Crear configuración desde variables de entorno"""
@@ -45,11 +51,14 @@ class Config:
             JWT_SECRET_KEY=os.getenv('JWT_SECRET_KEY'),
             JWT_ACCESS_TOKEN_EXPIRES=int(os.getenv('JWT_ACCESS_TOKEN_EXPIRES', cls.JWT_ACCESS_TOKEN_EXPIRES)),
             JWT_REFRESH_TOKEN_EXPIRES=int(os.getenv('JWT_REFRESH_TOKEN_EXPIRES', cls.JWT_REFRESH_TOKEN_EXPIRES)),
+            SECRET_KEY=os.getenv('SECRET_KEY', cls.SECRET_KEY),
+            FLASK_ENV=os.getenv('FLASK_ENV', 'development'),
             LOG_LEVEL=os.getenv('LOG_LEVEL', cls.LOG_LEVEL).upper(),
             LOG_FORMAT=os.getenv('LOG_FORMAT', cls.LOG_FORMAT),
             LOG_FILE=os.getenv('LOG_FILE', cls.LOG_FILE),
             LOG_MAX_BYTES=int(os.getenv('LOG_MAX_BYTES', cls.LOG_MAX_BYTES)),
-            LOG_BACKUP_COUNT=int(os.getenv('LOG_BACKUP_COUNT', cls.LOG_BACKUP_COUNT))
+            LOG_BACKUP_COUNT=int(os.getenv('LOG_BACKUP_COUNT', cls.LOG_BACKUP_COUNT)),
+            DATABASE_URL=os.getenv('DATABASE_URL', cls.DATABASE_URL)
         )
     
     def setup_logging(self):
@@ -96,3 +105,16 @@ class Config:
         
         logging.info(f"Sistema de logging configurado - Nivel: {self.LOG_LEVEL}")
         return root_logger
+
+    def is_production(self):
+        return self.FLASK_ENV == 'production'
+    
+    def validate_production_config(self):
+        """Valida configuración crítica para producción"""
+        if self.is_production():
+            if not self.JWT_SECRET_KEY:
+                raise ValueError("JWT_SECRET_KEY es obligatorio en producción")
+            if not self.SECRET_KEY:
+                raise ValueError("SECRET_KEY es obligatorio en producción")
+            if len(self.JWT_SECRET_KEY) < 32:
+                raise ValueError("JWT_SECRET_KEY debe tener al menos 32 caracteres")

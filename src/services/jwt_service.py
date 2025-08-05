@@ -5,9 +5,10 @@ import jwt
 import logging
 from datetime import datetime, timedelta
 from functools import wraps
-from flask import request, jsonify, current_app
+from flask import request, jsonify, current_app, render_template
 import os
 import secrets
+from config import Config
 
 # Configurar logger para este módulo
 logger = logging.getLogger(__name__)
@@ -16,8 +17,9 @@ class JWTService:
     """Servicio para manejo de JWT tokens"""
     
     def __init__(self):
+        config = Config.from_env()
         # Generar clave secreta segura si no existe
-        self.secret_key = os.environ.get('JWT_SECRET_KEY', self._generate_secret_key())
+        self.secret_key = config.JWT_SECRET_KEY if config.JWT_SECRET_KEY else self._generate_secret_key()
         self.algorithm = 'HS256'
         self.access_token_expire_minutes = 480  # 8 horas
         self.refresh_token_expire_days = 30
@@ -92,6 +94,27 @@ class JWTService:
             logger.warning("Error parsing Authorization header")
             raise ValueError("Invalid authorization format")
     
+    def get_token_from_cookie_or_header(self) -> str:
+        """
+        Extrae JWT token desde cookie o header Authorization
+        Prioridad: 1) Header Authorization, 2) Cookie
+        """
+        # Intentar desde header (para requests AJAX)
+        auth_header = request.headers.get('Authorization')
+        if auth_header and auth_header.startswith('Bearer '):
+            token = auth_header.split(' ')[1]
+            logger.debug("Token JWT extraído desde header Authorization")
+            return token
+        
+        # Intentar desde cookie (para navegación de páginas)
+        token = request.cookies.get('access_token')
+        if token:
+            logger.debug("Token JWT extraído desde cookie")
+            return token
+        
+        logger.debug("No se encontró token JWT en header ni cookie")
+        return None
+    
     def verify_access_token(self, token: str) -> dict:
         """Verifica un token de acceso y retorna el payload"""
         payload = self.decode_token(token)
@@ -114,7 +137,7 @@ class JWTService:
 jwt_service = JWTService()
 
 def jwt_required(f):
-    """Decorador para requerir autenticación JWT"""
+    """Decorador para requerir autenticación JWT (solo para APIs)"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         try:
@@ -143,7 +166,7 @@ def jwt_required(f):
     return decorated_function
 
 def admin_required(f):
-    """Decorador para requerir permisos de administrador con JWT"""
+    """Decorador para requerir permisos de administrador con JWT (solo para APIs)"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         try:
@@ -193,5 +216,98 @@ def optional_jwt(f):
             logger.debug("JWT opcional - sin token válido")
             
         return f(*args, **kwargs)
+    
+    return decorated_function
+
+# ========== DECORADORES PARA PÁGINAS HTML ==========
+
+def optional_auth(f):
+    """
+    Decorador para autenticación opcional en páginas HTML
+    No bloquea el acceso, pero agrega user info si está autenticado
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        try:
+            token = jwt_service.get_token_from_cookie_or_header()
+            if token:
+                payload = jwt_service.verify_access_token(token)
+                request.current_user = {
+                    'user_id': payload['user_id'],
+                    'username': payload['username'],
+                    'role': payload['role']
+                }
+                logger.debug(f"Autenticación opcional exitosa para {payload.get('username')}")
+            else:
+                request.current_user = None
+                logger.debug("Sin autenticación en ruta opcional")
+        except Exception as e:
+            logger.debug(f"Error en autenticación opcional: {e}")
+            request.current_user = None
+        
+        return f(*args, **kwargs)
+    
+    return decorated_function
+
+def require_auth(f):
+    """
+    Decorador que REQUIERE autenticación para acceder a la página HTML
+    Redirige a login si no está autenticado
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        try:
+            token = jwt_service.get_token_from_cookie_or_header()
+            if not token:
+                logger.warning("Acceso denegado - sin token JWT")
+                return render_template('sqlite_login.html')
+            
+            payload = jwt_service.verify_access_token(token)
+            request.current_user = {
+                'user_id': payload['user_id'],
+                'username': payload['username'],
+                'role': payload['role']
+            }
+            
+            logger.info(f"Acceso autorizado para {payload.get('username')}")
+            return f(*args, **kwargs)
+            
+        except Exception as e:
+            logger.warning(f"Acceso denegado - token inválido: {e}")
+            return render_template('sqlite_login.html')
+    
+    return decorated_function
+
+def require_admin(f):
+    """
+    Decorador que REQUIERE permisos de administrador para páginas HTML
+    Redirige a login si no está autenticado o no es admin
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        try:
+            token = jwt_service.get_token_from_cookie_or_header()
+            if not token:
+                logger.warning("Acceso de admin denegado - sin token JWT")
+                return render_template('sqlite_login.html')
+            
+            payload = jwt_service.verify_access_token(token)
+            
+            if payload.get('role') != 'admin':
+                logger.warning(f"Acceso de admin denegado para {payload.get('username')} (rol: {payload.get('role')})")
+                return render_template('sqlite_login.html')
+            
+            request.current_user = {
+                'user_id': payload['user_id'],
+                'username': payload['username'],
+                'role': payload['role']
+            }
+            
+            logger.info(f"Acceso de admin autorizado para {payload.get('username')}")
+            return f(*args, **kwargs)
+            
+        except Exception as e:
+            logger.warning(f"Acceso de admin denegado - token inválido: {e}")
+            return render_template('sqlite_login.html')
     
     return decorated_function
