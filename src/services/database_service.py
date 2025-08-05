@@ -7,7 +7,7 @@ from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
 from models.database import DatabaseManager, User, Image, Annotation
 import os
-
+from config import Config
 # Configurar logger para este módulo
 logger = logging.getLogger(__name__)
 
@@ -15,8 +15,9 @@ class DatabaseService:
     """Servicio para operaciones de base de datos"""
     
     def __init__(self, database_url=None):
+        config = Config.from_env()
         if database_url is None:
-            database_url = os.getenv("DATABASE_URL", "sqlite:///labeling_app.db")
+            database_url = config.DATABASE_URL
         self.db_manager = DatabaseManager(database_url)
         logger.info(f"DatabaseService inicializado con URL: {database_url}")
         
@@ -419,7 +420,13 @@ class DatabaseService:
             user = User(username=username, password=password, role=role)
             session.add(user)
             session.commit()
-            return user
+            
+            # Crear una instancia desvinculada antes de cerrar la sesión
+            detached_user = User(username=user.username, password="", role=user.role)
+            detached_user.id = user.id
+            detached_user.password_hash = user.password_hash
+            
+            return detached_user
         except Exception:
             session.rollback()
             return None
@@ -433,7 +440,12 @@ class DatabaseService:
             image = Image(image_path=image_path, initial_ocr_text=initial_ocr_text)
             session.add(image)
             session.commit()
-            return image
+            
+            # Crear una instancia desvinculada antes de cerrar la sesión
+            detached_image = Image(image_path=image.image_path, initial_ocr_text=image.initial_ocr_text)
+            detached_image.id = image.id
+            
+            return detached_image
         except Exception:
             session.rollback()
             return None
@@ -442,12 +454,12 @@ class DatabaseService:
     
     # Métodos de estadísticas
     def get_user_stats(self, user_id: int) -> dict:
-        """Obtiene estadísticas de un usuario - Optimizada"""
+        """Obtiene estadísticas de un usuario - Optimizada con comparación admin"""
         session = self.get_session()
         try:
-            from sqlalchemy import func, case
+            from sqlalchemy import func, case, and_, exists
             
-            # Una sola consulta con COUNT y CASE para obtener todas las estadísticas
+            # Una sola consulta con COUNT y CASE para obtener todas las estadísticas básicas
             result = session.query(
                 func.count(Annotation.id).label('total'),
                 func.sum(case((Annotation.status == 'pending', 1), else_=0)).label('pending'),
@@ -456,12 +468,50 @@ class DatabaseService:
                 func.sum(case((Annotation.status == 'discarded', 1), else_=0)).label('discarded')
             ).filter(Annotation.user_id == user_id).first()
             
+            # Consulta separada para estadísticas de comparación con admin
+            # Alias para las anotaciones
+            UserAnnotation = session.query(Annotation).filter(
+                and_(
+                    Annotation.user_id == user_id,
+                    Annotation.status.in_(['corrected', 'approved', 'discarded'])
+                )
+            ).subquery('user_ann')
+            
+            AdminAnnotation = session.query(Annotation).filter(
+                and_(
+                    Annotation.user_id == 1,
+                    Annotation.status.in_(['corrected', 'approved', 'discarded'])
+                )
+            ).subquery('admin_ann')
+            
+            # Anotaciones del usuario que también fueron revieweadas por admin (misma imagen)
+            reviewed_by_both = session.query(func.count(UserAnnotation.c.id)).filter(
+                exists().where(
+                    AdminAnnotation.c.image_id == UserAnnotation.c.image_id
+                )
+            ).scalar() or 0
+            
+            # Anotaciones con el mismo status entre usuario y admin (misma imagen y mismo texto corregido)
+            matching_with_admin = session.query(func.count(UserAnnotation.c.id)).filter(
+                exists().where(
+                    and_(
+                        AdminAnnotation.c.image_id == UserAnnotation.c.image_id,
+                        AdminAnnotation.c.corrected_text == UserAnnotation.c.corrected_text
+                    )
+                )
+            ).scalar() or 0
+            
+            # Calcular accuracy (porcentaje de coincidencias)
+            accuracy_with_admin = round((matching_with_admin / reviewed_by_both * 100), 1) if reviewed_by_both > 0 else 0
+            
             stats = {
                 'total': result.total or 0,
                 'pending': result.pending or 0,
                 'corrected': result.corrected or 0,
                 'approved': result.approved or 0,
-                'discarded': result.discarded or 0
+                'discarded': result.discarded or 0,
+                'reviewed_by_admin_count': reviewed_by_both,
+                'accuracy_with_admin': accuracy_with_admin
             }
             return stats
         finally:
@@ -635,5 +685,196 @@ class DatabaseService:
                 })
             
             return result
+        finally:
+            session.close()
+
+    def get_all_users_with_stats(self) -> List[dict]:
+        """Obtiene todos los usuarios con sus estadísticas de tareas"""
+        session = self.get_session()
+        try:
+            from sqlalchemy import func, case
+            
+            # Consulta que une usuarios con estadísticas de anotaciones
+            result = session.query(
+                User.id,
+                User.username,
+                User.role,
+                func.count(Annotation.id).label('total_assigned'),
+                func.sum(case((Annotation.status.in_(['corrected', 'approved', 'discarded']), 1), else_=0)).label('completed'),
+                func.sum(case((Annotation.status == 'pending', 1), else_=0)).label('pending')
+            ).outerjoin(Annotation, User.id == Annotation.user_id)\
+             .group_by(User.id, User.username, User.role)\
+             .order_by(User.username).all()
+            
+            users_with_stats = []
+            for row in result:
+                user_dict = {
+                    'id': row.id,
+                    'username': row.username,
+                    'role': row.role,
+                    'total_assigned': row.total_assigned or 0,
+                    'completed': row.completed or 0,
+                    'pending': row.pending or 0
+                }
+                users_with_stats.append(user_dict)
+            
+            return users_with_stats
+        finally:
+            session.close()
+    
+    def get_user_annotations_detailed(self, user_id: int) -> List[dict]:
+        """Obtiene todas las anotaciones de un usuario con detalles, ordenadas por fecha"""
+        session = self.get_session()
+        try:
+            annotations = session.query(Annotation, Image).join(
+                Image, Annotation.image_id == Image.id
+            ).filter(
+                Annotation.user_id == user_id
+            ).order_by(Annotation.updated_at.desc()).all()
+            
+            result = []
+            for annotation, image in annotations:
+                result.append({
+                    'annotation_id': annotation.id,
+                    'image_id': image.id,
+                    'image_path': image.image_path,
+                    'initial_ocr_text': image.initial_ocr_text[:100] + '...' if len(image.initial_ocr_text) > 100 else image.initial_ocr_text,
+                    'corrected_text': annotation.corrected_text[:100] + '...' if annotation.corrected_text and len(annotation.corrected_text) > 100 else annotation.corrected_text,
+                    'status': annotation.status,
+                    'updated_at': annotation.updated_at.isoformat() if annotation.updated_at else None
+                })
+            
+            return result
+        finally:
+            session.close()
+
+    def delete_user_annotation(self, annotation_id: int, user_id: int) -> bool:
+        """Elimina una anotación específica de un usuario"""
+        session = self.get_session()
+        try:
+            annotation = session.query(Annotation).filter_by(
+                id=annotation_id,
+                user_id=user_id
+            ).first()
+            
+            if annotation:
+                session.delete(annotation)
+                session.commit()
+                logger.info(f"Anotación {annotation_id} del usuario {user_id} eliminada")
+                return True
+            return False
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Error eliminando anotación {annotation_id}: {e}")
+            return False
+        finally:
+            session.close()
+
+    def delete_user_annotations_by_status(self, user_id: int, statuses: List[str]) -> int:
+        """Elimina todas las anotaciones de un usuario por estado(s)"""
+        session = self.get_session()
+        try:
+            deleted_count = session.query(Annotation).filter(
+                Annotation.user_id == user_id,
+                Annotation.status.in_(statuses)
+            ).delete(synchronize_session=False)
+            
+            session.commit()
+            logger.info(f"Eliminadas {deleted_count} anotaciones del usuario {user_id} con estados {statuses}")
+            return deleted_count
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Error eliminando anotaciones del usuario {user_id}: {e}")
+            return 0
+        finally:
+            session.close()
+
+    def delete_user_completely(self, user_id: int) -> bool:
+        """Elimina un usuario y todas sus anotaciones"""
+        session = self.get_session()
+        try:
+            # Primero eliminar todas las anotaciones del usuario
+            deleted_annotations = session.query(Annotation).filter_by(user_id=user_id).delete()
+            
+            # Luego eliminar el usuario
+            user = session.query(User).filter_by(id=user_id).first()
+            if user:
+                session.delete(user)
+                session.commit()
+                logger.info(f"Usuario {user_id} eliminado junto con {deleted_annotations} anotaciones")
+                return True
+            return False
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Error eliminando usuario {user_id}: {e}")
+            return False
+        finally:
+            session.close()
+
+    def transfer_user_annotations(self, from_user_id: int, to_user_id: int, 
+                                 include_pending: bool = True, include_reviewed: bool = True) -> dict:
+        """Transfiere anotaciones de un usuario a otro"""
+        session = self.get_session()
+        try:
+            # Verificar que ambos usuarios existen
+            from_user = session.query(User).filter_by(id=from_user_id).first()
+            to_user = session.query(User).filter_by(id=to_user_id).first()
+            
+            if not from_user or not to_user:
+                return {'success': False, 'error': 'Usuario origen o destino no encontrado'}
+            
+            # Determinar qué estados incluir
+            statuses_to_transfer = []
+            if include_pending:
+                statuses_to_transfer.append('pending')
+            if include_reviewed:
+                statuses_to_transfer.extend(['corrected', 'approved', 'discarded'])
+            
+            if not statuses_to_transfer:
+                return {'success': False, 'error': 'No se especificaron estados para transferir'}
+            
+            # Obtener anotaciones a transferir
+            annotations_to_transfer = session.query(Annotation).filter(
+                Annotation.user_id == from_user_id,
+                Annotation.status.in_(statuses_to_transfer)
+            ).all()
+            
+            transferred_count = 0
+            skipped_count = 0
+            
+            for annotation in annotations_to_transfer:
+                # Verificar si el usuario destino ya tiene esta imagen asignada
+                existing = session.query(Annotation).filter_by(
+                    user_id=to_user_id,
+                    image_id=annotation.image_id
+                ).first()
+                
+                if existing:
+                    skipped_count += 1
+                    continue
+                
+                # Transferir la anotación
+                annotation.user_id = to_user_id
+                # Si es una anotación revisada, mantener el estado; si es pending, resetear fecha
+                if annotation.status == 'pending':
+                    annotation.updated_at = datetime.now(timezone.utc)
+                
+                transferred_count += 1
+            
+            session.commit()
+            
+            logger.info(f"Transferidas {transferred_count} anotaciones de usuario {from_user_id} a {to_user_id}")
+            
+            return {
+                'success': True,
+                'transferred': transferred_count,
+                'skipped': skipped_count,
+                'total_attempted': len(annotations_to_transfer)
+            }
+            
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Error transfiriendo anotaciones: {e}")
+            return {'success': False, 'error': str(e)}
         finally:
             session.close()

@@ -228,10 +228,13 @@ class AdminPanel {
                 <td>${user.id}</td>
                 <td>${user.username}</td>
                 <td><span class="status-badge ${user.role === 'admin' ? 'status-approved' : 'status-pending'}">${user.role}</span></td>
-                <td>-</td>
-                <td>-</td>
                 <td>
-                    <button class="btn btn-primary btn-sm" onclick="viewUserStats(${user.id})">Ver Stats</button>
+                    <div class="action-buttons">
+                        <button class="btn btn-primary btn-sm" onclick="viewUserStats(${user.id})">📊 Stats</button>
+                        <button class="btn btn-secondary btn-sm" onclick="manageUserAnnotations(${user.id}, '${user.username}')">📝 Anotaciones</button>
+                        <button class="btn btn-warning btn-sm" onclick="transferUserAnnotations(${user.id}, '${user.username}')">↔️ Transferir</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteUser(${user.id}, '${user.username}')">🗑️ Eliminar</button>
+                    </div>
                 </td>
             </tr>
         `).join('');
@@ -245,7 +248,7 @@ class AdminPanel {
         container.innerHTML = annotators.map(user => `
             <div class="checkbox-item">
                 <input type="checkbox" id="user-${user.id}" value="${user.id}">
-                <label for="user-${user.id}">${user.username}</label>
+                <label for="user-${user.id}">${user.username} (${user.total_assigned} asignadas, ${user.completed} completadas)</label>
             </div>
         `).join('');
         
@@ -253,7 +256,7 @@ class AdminPanel {
         const autoSelect = document.getElementById('auto-user-select');
         autoSelect.innerHTML = '<option value="">Seleccionar usuario...</option>' +
             annotators.map(user => `
-                <option value="${user.id}">${user.username}</option>
+                <option value="${user.id}">${user.username} (${user.total_assigned} asignadas, ${user.completed} completadas)</option>
             `).join('');
     }
 
@@ -564,7 +567,14 @@ function showCreateUserModal() {
 }
 
 function closeModal(modalId) {
-    document.getElementById(modalId).style.display = 'none';
+    const modal = document.getElementById(modalId);
+    if (modal) {
+        modal.style.display = 'none';
+        // Si es un modal dinámico (como user-stats-modal), eliminarlo del DOM
+        if (modalId.includes('-stats-modal') || modalId.includes('-annotations-modal')) {
+            modal.remove();
+        }
+    }
 }
 
 async function createAssignments() {
@@ -576,8 +586,104 @@ async function createAutoAssignments() {
 }
 
 async function viewUserStats(userId) {
-    // TODO: Implementar vista de estadísticas de usuario
-    alert(`Ver estadísticas del usuario ${userId} (por implementar)`);
+    // Mostrar indicador de carga
+    const loadingModal = `
+        <div id="loading-modal" class="modal" style="display: block;">
+            <div class="modal-content" style="text-align: center; max-width: 300px;">
+                <h3>📊 Cargando estadísticas...</h3>
+                <div style="margin: 1rem 0;">
+                    <div style="display: inline-block; width: 20px; height: 20px; border: 3px solid #f3f3f3; border-top: 3px solid #667eea; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                </div>
+            </div>
+        </div>
+        <style>
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+        </style>
+    `;
+    document.body.insertAdjacentHTML('beforeend', loadingModal);
+    
+    try {
+        const response = await adminPanel.makeRequest(`/api/v2/admin/users/${userId}/stats`);
+        
+        // Remover modal de carga
+        const loadingElement = document.getElementById('loading-modal');
+        if (loadingElement) loadingElement.remove();
+        
+        if (response && response.ok) {
+            const data = await response.json();
+            const user = data.user;
+            const stats = data.stats;
+            
+            // Calcular porcentajes
+            const completionRate = stats.total > 0 ? ((stats.corrected + stats.approved + stats.discarded) / stats.total * 100).toFixed(1) : 0;
+            const approvalRate = (stats.corrected + stats.approved) > 0 ? (stats.approved / (stats.corrected + stats.approved) * 100).toFixed(1) : 0;
+            
+            // Crear modal con estadísticas
+            const modalHtml = `
+                <div id="user-stats-modal" class="modal" style="display: block;">
+                    <div class="modal-content">
+                        <h3>📊 Estadísticas de ${user.username}</h3>
+                        <div class="user-info-section" style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin: 1rem 0;">
+                            <p><strong>Usuario:</strong> ${user.username}</p>
+                            <p><strong>Rol:</strong> <span class="status-badge ${user.role === 'admin' ? 'status-approved' : 'status-pending'}">${user.role}</span></p>
+                        </div>
+                        <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr); margin: 1.5rem 0;">
+                            <div class="stat-card">
+                                <div class="stat-number">${stats.total}</div>
+                                <div class="stat-label">Total Asignadas</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-number">${stats.pending}</div>
+                                <div class="stat-label">Pendientes</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-number">${stats.corrected}</div>
+                                <div class="stat-label">Corregidas</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-number">${stats.approved}</div>
+                                <div class="stat-label">Aprobadas</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-number">${stats.discarded}</div>
+                                <div class="stat-label">Descartadas</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-number">${completionRate}%</div>
+                                <div class="stat-label">Tasa de Completado</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-number">${stats.reviewed_by_admin_count || 0}</div>
+                                <div class="stat-label">Revisadas por Admin</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-number">${stats.accuracy_with_admin || 0}%</div>
+                                <div class="stat-label">Precisión vs Admin</div>
+                            </div>
+                        </div>
+                        <div style="text-align: center; margin-top: 1.5rem;">
+                            <button class="btn btn-primary" onclick="closeModal('user-stats-modal')">Cerrar</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Insertar modal en el DOM
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+        } else {
+            alert('Error cargando estadísticas del usuario');
+        }
+    } catch (error) {
+        // Remover modal de carga en caso de error
+        const loadingElement = document.getElementById('loading-modal');
+        if (loadingElement) loadingElement.remove();
+        
+        console.error('Error loading user stats:', error);
+        alert('Error de conexión');
+    }
 }
 
 async function viewImageAnnotations(imageId) {
@@ -633,3 +739,297 @@ window.addEventListener('click', function(event) {
         }
     });
 });
+
+// ========== FUNCIONES DE GESTIÓN DE USUARIOS ==========
+
+async function manageUserAnnotations(userId, username) {
+    // Mostrar indicador de carga
+    const loadingModal = `
+        <div id="loading-modal" class="modal" style="display: block;">
+            <div class="modal-content" style="text-align: center; max-width: 300px;">
+                <h3>📝 Cargando anotaciones...</h3>
+                <div style="margin: 1rem 0;">
+                    <div style="display: inline-block; width: 20px; height: 20px; border: 3px solid #f3f3f3; border-top: 3px solid #667eea; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', loadingModal);
+    
+    try {
+        const response = await adminPanel.makeRequest(`/api/v2/admin/users/${userId}/annotations`);
+        
+        // Remover modal de carga
+        const loadingElement = document.getElementById('loading-modal');
+        if (loadingElement) loadingElement.remove();
+        
+        if (response && response.ok) {
+            const data = await response.json();
+            showAnnotationsManagementModal(userId, username, data.annotations);
+        } else {
+            alert('Error cargando anotaciones del usuario');
+        }
+    } catch (error) {
+        // Remover modal de carga en caso de error
+        const loadingElement = document.getElementById('loading-modal');
+        if (loadingElement) loadingElement.remove();
+        
+        console.error('Error loading user annotations:', error);
+        alert('Error de conexión');
+    }
+}
+
+function showAnnotationsManagementModal(userId, username, annotations) {
+    const modalHtml = `
+        <div id="annotations-management-modal" class="modal" style="display: block;">
+            <div class="modal-content" style="max-width: 900px;">
+                <h3>📝 Gestión de Anotaciones - ${username}</h3>
+                
+                <div class="management-actions" style="margin: 1rem 0; padding: 1rem; background: #f8f9fa; border-radius: 8px;">
+                    <h4>Acciones Masivas</h4>
+                    <div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 0.5rem;">
+                        <button class="btn btn-warning btn-sm" onclick="bulkDeleteAnnotations(${userId}, ['pending'])">
+                            🗑️ Eliminar Pendientes (${annotations.filter(a => a.status === 'pending').length})
+                        </button>
+                        <button class="btn btn-danger btn-sm" onclick="bulkDeleteAnnotations(${userId}, ['corrected', 'approved', 'discarded'])">
+                            🗑️ Eliminar Revisadas (${annotations.filter(a => ['corrected', 'approved', 'discarded'].includes(a.status)).length})
+                        </button>
+                        <button class="btn btn-danger" onclick="bulkDeleteAnnotations(${userId}, ['pending', 'corrected', 'approved', 'discarded'])">
+                            🗑️ Eliminar Todas (${annotations.length})
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="annotations-list" style="max-height: 400px; overflow-y: auto;">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Imagen</th>
+                                <th>Estado</th>
+                                <th>Última Actualización</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${annotations.map(annotation => `
+                                <tr>
+                                    <td>${annotation.annotation_id}</td>
+                                    <td title="${annotation.image_path}">
+                                        ${annotation.image_path.length > 30 ? 
+                                          annotation.image_path.substring(0, 30) + '...' : 
+                                          annotation.image_path}
+                                    </td>
+                                    <td>
+                                        <span class="status-badge status-${annotation.status}">${annotation.status}</span>
+                                    </td>
+                                    <td>${annotation.updated_at ? new Date(annotation.updated_at).toLocaleString() : 'N/A'}</td>
+                                    <td>
+                                        <button class="btn btn-danger btn-sm" 
+                                                onclick="deleteSpecificAnnotation(${userId}, ${annotation.annotation_id}, '${annotation.image_path}')">
+                                            🗑️ Eliminar
+                                        </button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div style="text-align: center; margin-top: 1.5rem;">
+                    <button class="btn btn-primary" onclick="closeModal('annotations-management-modal')">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Insertar modal en el DOM
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+async function deleteSpecificAnnotation(userId, annotationId, imagePath) {
+    if (!confirm(`¿Estás seguro de eliminar la anotación de la imagen "${imagePath}"?`)) {
+        return;
+    }
+    
+    try {
+        const response = await adminPanel.makeRequest(`/api/v2/admin/users/${userId}/annotations/${annotationId}`, {
+            method: 'DELETE'
+        });
+        
+        if (response && response.ok) {
+            alert('Anotación eliminada correctamente');
+            closeModal('annotations-management-modal');
+            await adminPanel.loadUsers(); // Actualizar la tabla
+        } else {
+            const error = await response.json();
+            alert(error.error || 'Error eliminando anotación');
+        }
+    } catch (error) {
+        console.error('Error deleting annotation:', error);
+        alert('Error de conexión');
+    }
+}
+
+async function bulkDeleteAnnotations(userId, statuses) {
+    const statusText = statuses.join(', ');
+    if (!confirm(`¿Estás seguro de eliminar todas las anotaciones con estado: ${statusText}?`)) {
+        return;
+    }
+    
+    try {
+        const response = await adminPanel.makeRequest(`/api/v2/admin/users/${userId}/annotations/bulk-delete`, {
+            method: 'POST',
+            body: JSON.stringify({ statuses })
+        });
+        
+        if (response && response.ok) {
+            const result = await response.json();
+            alert(`${result.deleted_count} anotaciones eliminadas correctamente`);
+            closeModal('annotations-management-modal');
+            await adminPanel.loadUsers(); // Actualizar la tabla
+        } else {
+            const error = await response.json();
+            alert(error.error || 'Error eliminando anotaciones');
+        }
+    } catch (error) {
+        console.error('Error bulk deleting annotations:', error);
+        alert('Error de conexión');
+    }
+}
+
+async function transferUserAnnotations(fromUserId, fromUsername) {
+    try {
+        // Obtener lista de usuarios para el selector
+        const usersResponse = await adminPanel.makeRequest('/api/v2/admin/users');
+        if (!usersResponse.ok) {
+            alert('Error cargando usuarios');
+            return;
+        }
+        
+        const usersData = await usersResponse.json();
+        const availableUsers = usersData.users.filter(user => user.id !== fromUserId && user.role === 'annotator');
+        
+        if (availableUsers.length === 0) {
+            alert('No hay otros usuarios disponibles para transferir');
+            return;
+        }
+        
+        const modalHtml = `
+            <div id="transfer-annotations-modal" class="modal" style="display: block;">
+                <div class="modal-content" style="max-width: 500px;">
+                    <h3>↔️ Transferir Anotaciones</h3>
+                    <p>Transferir anotaciones de <strong>${fromUsername}</strong> a:</p>
+                    
+                    <div class="form-group">
+                        <label for="target-user">Usuario destino:</label>
+                        <select id="target-user" class="form-control">
+                            <option value="">Seleccionar usuario...</option>
+                            ${availableUsers.map(user => `
+                                <option value="${user.id}">${user.username} (${user.total_assigned} asignadas)</option>
+                            `).join('')}
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Tipos de anotaciones a transferir:</label>
+                        <div style="margin-top: 0.5rem;">
+                            <label style="display: block; margin-bottom: 0.5rem;">
+                                <input type="checkbox" id="include-pending" checked style="margin-right: 0.5rem;">
+                                Pendientes
+                            </label>
+                            <label style="display: block;">
+                                <input type="checkbox" id="include-reviewed" style="margin-right: 0.5rem;">
+                                Revisadas (corregidas, aprobadas, descartadas)
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div style="text-align: center; margin-top: 1.5rem;">
+                        <button class="btn btn-primary" onclick="executeTransferAnnotations(${fromUserId})">
+                            ↔️ Transferir
+                        </button>
+                        <button class="btn btn-secondary" onclick="closeModal('transfer-annotations-modal')" style="margin-left: 0.5rem;">
+                            Cancelar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        
+    } catch (error) {
+        console.error('Error loading transfer modal:', error);
+        alert('Error de conexión');
+    }
+}
+
+async function executeTransferAnnotations(fromUserId) {
+    const toUserId = document.getElementById('target-user').value;
+    const includePending = document.getElementById('include-pending').checked;
+    const includeReviewed = document.getElementById('include-reviewed').checked;
+    
+    if (!toUserId) {
+        alert('Por favor selecciona un usuario destino');
+        return;
+    }
+    
+    if (!includePending && !includeReviewed) {
+        alert('Por favor selecciona al menos un tipo de anotación para transferir');
+        return;
+    }
+    
+    try {
+        const response = await adminPanel.makeRequest(`/api/v2/admin/users/${fromUserId}/transfer-annotations`, {
+            method: 'POST',
+            body: JSON.stringify({
+                to_user_id: toUserId,
+                include_pending: includePending,
+                include_reviewed: includeReviewed
+            })
+        });
+        
+        if (response && response.ok) {
+            const result = await response.json();
+            alert(`Transferencia completada:\n- ${result.transferred} anotaciones transferidas\n- ${result.skipped} anotaciones omitidas (ya existían)`);
+            closeModal('transfer-annotations-modal');
+            await adminPanel.loadUsers(); // Actualizar la tabla
+        } else {
+            const error = await response.json();
+            alert(error.error || 'Error transfiriendo anotaciones');
+        }
+    } catch (error) {
+        console.error('Error transferring annotations:', error);
+        alert('Error de conexión');
+    }
+}
+
+async function deleteUser(userId, username) {
+    if (!confirm(`¿Estás COMPLETAMENTE SEGURO de eliminar al usuario "${username}"?\n\nEsta acción eliminará:\n- El usuario\n- TODAS sus anotaciones\n\nEsta acción NO SE PUEDE DESHACER.`)) {
+        return;
+    }
+    
+    // Confirmación adicional
+    if (!confirm(`¡ÚLTIMA CONFIRMACIÓN!\n\n¿Eliminar definitivamente a "${username}" y todas sus anotaciones?`)) {
+        return;
+    }
+    
+    try {
+        const response = await adminPanel.makeRequest(`/api/v2/admin/users/${userId}`, {
+            method: 'DELETE'
+        });
+        
+        if (response && response.ok) {
+            alert('Usuario eliminado correctamente');
+            await adminPanel.loadUsers(); // Actualizar la tabla
+            await adminPanel.loadGeneralStats(); // Actualizar estadísticas
+        } else {
+            const error = await response.json();
+            alert(error.error || 'Error eliminando usuario');
+        }
+    } catch (error) {
+        console.error('Error deleting user:', error);
+        alert('Error de conexión');
+    }
+}

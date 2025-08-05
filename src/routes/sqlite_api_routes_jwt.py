@@ -416,17 +416,17 @@ def get_all_images():
 @api_bp.route('/admin/users', methods=['GET'])
 @admin_required
 def get_all_users():
-    """Obtiene todos los usuarios"""
+    """Obtiene todos los usuarios con estadísticas"""
     admin_username = request.current_user['username']
     
     logger.debug(f"Admin {admin_username} solicitando lista de usuarios")
     
-    users = db_service.get_all_users()
+    users = db_service.get_all_users_with_stats()
     
     logger.debug(f"Admin {admin_username} obtuvo {len(users)} usuarios")
     
     return jsonify({
-        'users': [user.to_dict() for user in users]
+        'users': users
     })
 
 @api_bp.route('/admin/users', methods=['POST'])
@@ -553,6 +553,155 @@ def get_user_stats():
     logger.debug(f"Estadísticas obtenidas para usuario {username}")
     
     return jsonify(stats)
+
+@api_bp.route('/admin/users/<int:user_id>/stats', methods=['GET'])
+@admin_required
+def get_user_detailed_stats(user_id):
+    """Obtiene estadísticas detalladas de un usuario específico"""
+    admin_username = request.current_user['username']
+    
+    logger.debug(f"Admin {admin_username} solicitando estadísticas detalladas para usuario {user_id}")
+    
+    # Obtener información básica del usuario
+    user = db_service.get_user_by_id(user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    
+    # Obtener estadísticas del usuario
+    stats = db_service.get_user_stats(user_id)
+    
+    logger.debug(f"Admin {admin_username} obtuvo estadísticas detalladas para usuario {user_id}")
+    
+    return jsonify({
+        'user': user.to_dict(),
+        'stats': stats
+    })
+
+@api_bp.route('/admin/users/<int:user_id>/annotations', methods=['GET'])
+@admin_required
+def get_user_annotations(user_id):
+    """Obtiene todas las anotaciones de un usuario específico"""
+    admin_username = request.current_user['username']
+    
+    logger.debug(f"Admin {admin_username} solicitando anotaciones para usuario {user_id}")
+    
+    annotations = db_service.get_user_annotations_detailed(user_id)
+    
+    logger.debug(f"Admin {admin_username} obtuvo {len(annotations)} anotaciones para usuario {user_id}")
+    
+    return jsonify({
+        'user_id': user_id,
+        'annotations': annotations
+    })
+
+@api_bp.route('/admin/users/<int:user_id>/annotations/<int:annotation_id>', methods=['DELETE'])
+@admin_required
+def delete_user_annotation(user_id, annotation_id):
+    """Elimina una anotación específica de un usuario"""
+    admin_username = request.current_user['username']
+    
+    logger.info(f"Admin {admin_username} eliminando anotación {annotation_id} del usuario {user_id}")
+    
+    success = db_service.delete_user_annotation(annotation_id, user_id)
+    
+    if success:
+        logger.info(f"Admin {admin_username} eliminó anotación {annotation_id} exitosamente")
+        return jsonify({
+            'success': True,
+            'message': 'Annotation deleted successfully'
+        })
+    else:
+        logger.warning(f"Admin {admin_username} falló eliminando anotación {annotation_id}")
+        return jsonify({'error': 'Annotation not found or could not be deleted'}), 404
+
+@api_bp.route('/admin/users/<int:user_id>/annotations/bulk-delete', methods=['POST'])
+@admin_required
+@validate_json_input(required_fields=['statuses'])
+def bulk_delete_user_annotations(user_id):
+    """Elimina anotaciones de un usuario por estado"""
+    data = request.get_json()
+    admin_username = request.current_user['username']
+    
+    try:
+        statuses = data['statuses']
+        if not isinstance(statuses, list) or not all(status in ['pending', 'corrected', 'approved', 'discarded'] for status in statuses):
+            return jsonify({'error': 'Invalid statuses provided'}), 400
+        
+        logger.info(f"Admin {admin_username} eliminando anotaciones del usuario {user_id} con estados {statuses}")
+        
+        deleted_count = db_service.delete_user_annotations_by_status(user_id, statuses)
+        
+        logger.info(f"Admin {admin_username} eliminó {deleted_count} anotaciones del usuario {user_id}")
+        
+        return jsonify({
+            'success': True,
+            'deleted_count': deleted_count,
+            'message': f'{deleted_count} annotations deleted successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error eliminando anotaciones masivamente para admin {admin_username}: {e}")
+        return jsonify({'error': 'Failed to delete annotations'}), 500
+
+@api_bp.route('/admin/users/<int:user_id>', methods=['DELETE'])
+@admin_required
+def delete_user(user_id):
+    """Elimina un usuario completamente"""
+    admin_username = request.current_user['username']
+    
+    # Prevenir que el admin se elimine a sí mismo
+    if user_id == request.current_user['user_id']:
+        return jsonify({'error': 'Cannot delete your own account'}), 400
+    
+    logger.info(f"Admin {admin_username} eliminando usuario {user_id}")
+    
+    success = db_service.delete_user_completely(user_id)
+    
+    if success:
+        logger.info(f"Admin {admin_username} eliminó usuario {user_id} exitosamente")
+        return jsonify({
+            'success': True,
+            'message': 'User and all annotations deleted successfully'
+        })
+    else:
+        logger.warning(f"Admin {admin_username} falló eliminando usuario {user_id}")
+        return jsonify({'error': 'User not found or could not be deleted'}), 404
+
+@api_bp.route('/admin/users/<int:from_user_id>/transfer-annotations', methods=['POST'])
+@admin_required
+@validate_json_input(required_fields=['to_user_id'], optional_fields=['include_pending', 'include_reviewed'])
+def transfer_user_annotations(from_user_id):
+    """Transfiere anotaciones de un usuario a otro"""
+    data = request.get_json()
+    admin_username = request.current_user['username']
+    
+    try:
+        to_user_id = int(data['to_user_id'])
+        include_pending = data.get('include_pending', True)
+        include_reviewed = data.get('include_reviewed', False)
+        
+        if from_user_id == to_user_id:
+            return jsonify({'error': 'Source and destination users cannot be the same'}), 400
+        
+        logger.info(f"Admin {admin_username} transfiriendo anotaciones de usuario {from_user_id} a {to_user_id}")
+        
+        result = db_service.transfer_user_annotations(
+            from_user_id, to_user_id, include_pending, include_reviewed
+        )
+        
+        if result['success']:
+            logger.info(f"Admin {admin_username} transfirió {result['transferred']} anotaciones exitosamente")
+            return jsonify(result)
+        else:
+            logger.warning(f"Admin {admin_username} falló transfiriendo anotaciones: {result['error']}")
+            return jsonify(result), 400
+            
+    except ValueError as e:
+        logger.warning(f"Error de validación transfiriendo anotaciones para admin {admin_username}: {e}")
+        return jsonify({'error': 'Invalid user ID provided'}), 400
+    except Exception as e:
+        logger.error(f"Error interno transfiriendo anotaciones para admin {admin_username}: {e}")
+        return jsonify({'error': 'Failed to transfer annotations'}), 500
 
 # Endpoint para análisis de rendimiento (solo para desarrollo)
 @api_bp.route('/dev/performance', methods=['GET'])
