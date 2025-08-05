@@ -2,7 +2,7 @@
 Servicio de base de datos para la aplicación de anotación colaborativa
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
 from models.database import DatabaseManager, User, Image, Annotation
@@ -265,7 +265,7 @@ class DatabaseService:
                         annotation.user_id = user_id
                         annotation.image_id = image_id
                         annotation.status = 'pending'
-                        annotation.updated_at = datetime.now()
+                        annotation.updated_at = datetime.now(timezone.utc)
                         session.add(annotation)
                         assignments_created += 1
             
@@ -333,7 +333,7 @@ class DatabaseService:
                     annotation.user_id = user_id
                     annotation.image_id = image.id
                     annotation.status = 'pending'
-                    annotation.updated_at = datetime.now()
+                    annotation.updated_at = datetime.now(timezone.utc)
                     session.add(annotation)
                     assignments_created += 1
             

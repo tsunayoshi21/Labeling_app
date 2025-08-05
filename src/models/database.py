@@ -1,7 +1,7 @@
 """
 Modelos de base de datos SQLite para la aplicación de anotación colaborativa
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, ForeignKey, Index
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
@@ -83,7 +83,8 @@ class Annotation(Base):
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     corrected_text = Column(Text, nullable=True)
     status = Column(String(20), nullable=False, default='pending')  # 'pending', 'corrected', 'approved', 'discarded'
-    updated_at = Column(DateTime, nullable=False, default=datetime.now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=datetime.now(timezone.utc))
+
 
     # Relaciones
     image = relationship('Image', back_populates='annotations')
@@ -104,7 +105,7 @@ class Annotation(Base):
         self.status = status
         if corrected_text is not None:
             self.corrected_text = corrected_text
-        self.updated_at = datetime.now()
+        self.updated_at = datetime.now(timezone.utc)
     
     def to_dict(self):
         """Convierte la anotación a diccionario"""
@@ -115,6 +116,7 @@ class Annotation(Base):
             'corrected_text': self.corrected_text,
             'status': self.status,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
+
         }
     
     def to_dict_with_relations(self, user_dict=None, image_dict=None):
