@@ -23,7 +23,7 @@ preload_app = True
 # Logging
 accesslog = os.getenv('ACCESS_LOG', "-")  # stdout por defecto
 errorlog = os.getenv('ERROR_LOG', "-")    # stderr por defecto
-loglevel = os.getenv('LOG_LEVEL', 'info').lower()
+loglevel = os.getenv('LOG_LEVEL', 'debug').lower()
 access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s" %(D)s'
 
 # Seguridad y límites

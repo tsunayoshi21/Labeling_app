@@ -1,7 +1,7 @@
 services:
   web_app:
     container_name: web_app
-    command: python app.py
+    command: ./run_app.sh
     build:
       context: .
     image: web_app

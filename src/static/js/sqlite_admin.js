@@ -132,6 +132,7 @@ class AdminPanel {
         await this.loadRecentActivity();
         await this.loadUsers();
         await this.loadImages();
+        await this.loadQualityControl();
         this.setupEventListeners();
     }
 
@@ -224,20 +225,29 @@ class AdminPanel {
     displayUsers(users) {
         const tbody = document.querySelector('#users-table tbody');
         tbody.innerHTML = users.map(user => `
-            <tr>
+            <tr id="user-row-${user.id}">
                 <td>${user.id}</td>
                 <td>${user.username}</td>
                 <td><span class="status-badge ${user.role === 'admin' ? 'status-approved' : 'status-pending'}">${user.role}</span></td>
+                <td id="agreement-${user.id}" class="agreement-cell">
+                    ${user.role === 'admin' ? 
+                        '<span class="agreement-na">N/A</span>' : 
+                        '<span class="agreement-loading">⏳ Cargando...</span>'
+                    }
+                </td>
                 <td>
                     <div class="action-buttons">
                         <button class="btn btn-primary btn-sm" onclick="viewUserStats(${user.id})">📊 Stats</button>
-                        <button class="btn btn-secondary btn-sm" onclick="manageUserAnnotations(${user.id}, '${user.username}')">📝 Anotaciones</button>
-                        <button class="btn btn-warning btn-sm" onclick="transferUserAnnotations(${user.id}, '${user.username}')">↔️ Transferir</button>
-                        <button class="btn btn-danger btn-sm" onclick="deleteUser(${user.id}, '${user.username}')">🗑️ Eliminar</button>
+                        <button class="btn btn-secondary btn-sm" onclick="manageUserAnnotations(${user.id}, '${user.username}')" ${user.role === 'admin' ? 'disabled title="No disponible para usuarios admin"' : ''}>📝 Anotaciones</button>
+                        <button class="btn btn-warning btn-sm" onclick="transferUserAnnotations(${user.id}, '${user.username}')" ${user.role === 'admin' ? 'disabled title="No disponible para usuarios admin"' : ''}>↔️ Transferir</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteUser(${user.id}, '${user.username}')" ${user.role === 'admin' ? 'disabled title="No disponible para usuarios admin"' : ''}>🗑️ Eliminar</button>
                     </div>
                 </td>
             </tr>
         `).join('');
+        
+        // Cargar estadísticas de agreement de forma asíncrona para usuarios no-admin
+        this.loadAgreementStats(users.filter(user => user.role !== 'admin'));
     }
 
     displayUsersForAssignment(users) {
@@ -527,8 +537,195 @@ class AdminPanel {
         activityContainer.innerHTML = activityHTML;
     }
 
+    async loadQualityControl() {
+        try {
+            const response = await this.makeRequest('/api/v2/admin/quality-control');
+            if (response && response.ok) {
+                const data = await response.json();
+                this.displayQualityControl(data.quality_control_data);
+            }
+        } catch (error) {
+            console.error('Error loading quality control data:', error);
+        }
+    }
+
+    displayQualityControl(qualityData) {
+        const qualityContainer = document.getElementById('quality-control-list');
+        
+        if (!qualityData || qualityData.length === 0) {
+            qualityContainer.innerHTML = `
+                <div class="message success">
+                    <h4>🎉 ¡Excelente!</h4>
+                    <p>No hay discrepancias encontradas entre las anotaciones del admin y los usuarios.</p>
+                </div>
+            `;
+            return;
+        }
+
+        const qualityHTML = qualityData.map(item => `
+            <div class="quality-item" style="border: 1px solid #e1e5e9; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; background: white;">
+                <div style="display: grid; grid-template-columns: 1fr 2fr 1fr; gap: 1rem; align-items: start;">
+                    <!-- Información de la imagen -->
+                    <div>
+                        <h4>📷 Imagen ${item.image_id}</h4>
+                        <p style="font-size: 0.9em; color: #666; margin: 0.5rem 0;">
+                            <strong>Archivo:</strong> ${item.image_path.length > 50 ? 
+                                item.image_path.substring(0, 50) + '...' : 
+                                item.image_path}
+                        </p>
+                        <p style="font-size: 0.9em; color: #666; margin: 0.5rem 0;">
+                            <strong>Usuario:</strong> ${item.username}
+                        </p>
+                        <button class="btn btn-secondary btn-sm" onclick="showImageModal('${item.image_path}', '${item.initial_ocr_text}')">
+                            👁️ Ver Imagen
+                        </button>
+                    </div>
+                    
+                    <!-- Comparación de textos -->
+                    <div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                            <div>
+                                <h5 style="color: #28a745; margin-bottom: 0.5rem;">👤 Texto del Usuario</h5>
+                                <div style="background: #f8f9fa; padding: 0.75rem; border-radius: 5px; border-left: 4px solid #28a745; font-family: monospace; font-size: 0.9em; max-height: 150px; overflow-y: auto;">
+                                    ${item.user_annotation_text || 'N/A'}
+                                </div>
+                                <small style="color: #666;">Estado: <span class="status-badge status-${item.user_status}">${item.user_status}</span></small>
+                            </div>
+                            <div>
+                                <h5 style="color: #dc3545; margin-bottom: 0.5rem;">👨‍💼 Texto del Admin</h5>
+                                <div style="background: #f8f9fa; padding: 0.75rem; border-radius: 5px; border-left: 4px solid #dc3545; font-family: monospace; font-size: 0.9em; max-height: 150px; overflow-y: auto;">
+                                    ${item.admin_annotation_text || 'N/A'}
+                                </div>
+                                <small style="color: #666;">Estado: <span class="status-badge status-${item.admin_status}">${item.admin_status}</span></small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Acciones -->
+                    <div style="text-align: center;">
+                        <button class="btn btn-success" onclick="consolidateAnnotation(${item.annotation_id}, ${item.admin_annotation_id}, '${item.username}')" 
+                                style="width: 100%; margin-bottom: 0.5rem;">
+                            ✅ Consolidar<br><small>Usar texto del usuario</small>
+                        </button>
+                        <button class="btn btn-secondary btn-sm" onclick="showComparisonModal(${item.image_id}, '${item.username}', '${item.user_annotation_text?.replace(/'/g, "\\'")}', '${item.admin_annotation_text?.replace(/'/g, "\\'")}')">
+                            🔍 Comparar Detallado
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+
+        qualityContainer.innerHTML = qualityHTML;
+    }
+
+    async consolidateAnnotation(userAnnotationId, adminAnnotationId, username) {
+        if (!confirm(`¿Confirmar que el texto del usuario "${username}" es correcto y debe reemplazar la anotación del admin?`)) {
+            return;
+        }
+
+        try {
+            const response = await this.makeRequest('/api/v2/admin/quality-control/consolidate', {
+                method: 'POST',
+                body: JSON.stringify({
+                    user_annotation_id: userAnnotationId,
+                    admin_annotation_id: adminAnnotationId
+                })
+            });
+
+            if (response && response.ok) {
+                const result = await response.json();
+                
+                // Mostrar mensaje de éxito
+                const message = document.createElement('div');
+                message.className = 'message success';
+                message.innerHTML = `<strong>✅ Consolidación exitosa:</strong> La anotación del admin ha sido actualizada con el texto del usuario "${username}".`;
+                message.style.position = 'fixed';
+                message.style.top = '20px';
+                message.style.right = '20px';
+                message.style.zIndex = '2000';
+                message.style.maxWidth = '400px';
+                document.body.appendChild(message);
+                
+                // Remover mensaje después de 5 segundos
+                setTimeout(() => {
+                    message.remove();
+                }, 5000);
+                
+                // Recargar datos de control de calidad
+                await this.loadQualityControl();
+            } else {
+                const error = await response.json();
+                alert('Error consolidando anotación: ' + (error.error || 'Error desconocido'));
+            }
+        } catch (error) {
+            console.error('Error consolidating annotation:', error);
+            alert('Error consolidando anotación: ' + error.message);
+        }
+    }
+
     closeModal(modalId) {
-        document.getElementById(modalId).style.display = 'none';
+        const modal = document.getElementById(modalId);
+        if (modal) {
+            modal.style.display = 'none';
+            // Si es un modal dinámico, eliminarlo del DOM completamente
+            if (modalId.includes('-modal') && modalId !== 'create-user-modal') {
+                modal.remove();
+            }
+        }
+    }
+
+    async loadAgreementStats(users) {
+        try {
+            // Hacer la petición para obtener estadísticas de agreement
+            const response = await this.makeRequest('/api/v2/admin/users/agreement-stats');
+            if (response && response.ok) {
+                const data = await response.json();
+                const agreementStats = data.agreement_stats;
+                
+                // Actualizar cada celda de agreement con los datos obtenidos
+                users.forEach(user => {
+                    const cell = document.getElementById(`agreement-${user.id}`);
+                    if (cell) {
+                        if (agreementStats[user.id]) {
+                            const stats = agreementStats[user.id];
+                            const percentage = stats.agreement_percentage;
+                            const comparisons = stats.total_comparisons;
+                            
+                            // Determinar color basado en el porcentaje
+                            let colorClass = 'agreement-low';
+                            if (percentage >= 80) colorClass = 'agreement-high';
+                            else if (percentage >= 60) colorClass = 'agreement-medium';
+                            
+                            cell.innerHTML = `
+                                <span class="agreement-percentage ${colorClass}" title="${stats.agreements}/${comparisons} coincidencias">
+                                    ${percentage}%
+                                </span>
+                            `;
+                        } else {
+                            // No hay datos de comparación disponibles
+                            cell.innerHTML = '<span class="agreement-no-data" title="Sin datos de comparación">-</span>';
+                        }
+                    }
+                });
+            } else {
+                // Error cargando los datos
+                users.forEach(user => {
+                    const cell = document.getElementById(`agreement-${user.id}`);
+                    if (cell) {
+                        cell.innerHTML = '<span class="agreement-error" title="Error cargando datos">❌</span>';
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('Error loading agreement stats:', error);
+            // Mostrar error en las celdas
+            users.forEach(user => {
+                const cell = document.getElementById(`agreement-${user.id}`);
+                if (cell) {
+                    cell.innerHTML = '<span class="agreement-error" title="Error cargando datos">❌</span>';
+                }
+            });
+        }
     }
 }
 
@@ -570,10 +767,7 @@ function closeModal(modalId) {
     const modal = document.getElementById(modalId);
     if (modal) {
         modal.style.display = 'none';
-        // Si es un modal dinámico (como user-stats-modal), eliminarlo del DOM
-        if (modalId.includes('-stats-modal') || modalId.includes('-annotations-modal')) {
-            modal.remove();
-        }
+        modal.remove(); // Eliminar modal del DOM
     }
 }
 
@@ -619,7 +813,6 @@ async function viewUserStats(userId) {
             
             // Calcular porcentajes
             const completionRate = stats.total > 0 ? ((stats.corrected + stats.approved + stats.discarded) / stats.total * 100).toFixed(1) : 0;
-            const approvalRate = (stats.corrected + stats.approved) > 0 ? (stats.approved / (stats.corrected + stats.approved) * 100).toFixed(1) : 0;
             
             // Crear modal con estadísticas
             const modalHtml = `
@@ -630,7 +823,7 @@ async function viewUserStats(userId) {
                             <p><strong>Usuario:</strong> ${user.username}</p>
                             <p><strong>Rol:</strong> <span class="status-badge ${user.role === 'admin' ? 'status-approved' : 'status-pending'}">${user.role}</span></p>
                         </div>
-                        <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr); margin: 1.5rem 0;">
+                        <div class="stats-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr); gap: 1rem; margin: 1.5rem 0;">
                             <div class="stat-card">
                                 <div class="stat-number">${stats.total}</div>
                                 <div class="stat-label">Total Asignadas</div>
@@ -654,14 +847,6 @@ async function viewUserStats(userId) {
                             <div class="stat-card">
                                 <div class="stat-number">${completionRate}%</div>
                                 <div class="stat-label">Tasa de Completado</div>
-                            </div>
-                            <div class="stat-card">
-                                <div class="stat-number">${stats.reviewed_by_admin_count || 0}</div>
-                                <div class="stat-label">Revisadas por Admin</div>
-                            </div>
-                            <div class="stat-card">
-                                <div class="stat-number">${stats.accuracy_with_admin || 0}%</div>
-                                <div class="stat-label">Precisión vs Admin</div>
                             </div>
                         </div>
                         <div style="text-align: center; margin-top: 1.5rem;">
@@ -700,6 +885,116 @@ async function viewImageAnnotations(imageId) {
     }
 }
 
+// ========== FUNCIONES DE CONTROL DE CALIDAD ==========
+
+function showImageModal(imagePath, initialOcrText) {
+    const ImageName = imagePath.split('/').pop();
+    imagePath = `/images/${ImageName}`; // Asegurarse de que
+    const modalHtml = `
+        <div id="image-viewer-modal" class="modal" style="display: block;">
+            <div class="modal-content" style="max-width: 800px;">
+                <h3>🖼️ Visualización de Imagen</h3>
+                
+                <div style="margin: 1rem 0;">
+                    <h4>Archivo:</h4>
+                    <p style="font-family: monospace; background: #f8f9fa; padding: 0.5rem; border-radius: 4px;">${ImageName}</p>
+                </div>
+                
+                <div style="margin: 1rem 0;">
+                    <h4>Texto OCR Inicial:</h4>
+                    <div style="background: #f8f9fa; padding: 1rem; border-radius: 4px; border-left: 4px solid #667eea; max-height: 200px; overflow-y: auto; font-family: monospace;">
+                        ${initialOcrText || 'N/A'}
+                    </div>
+                </div>
+                
+                <div style="margin: 1rem 0;">
+                    <h4>Vista previa de la imagen:</h4>
+                    <div style="text-align: center; background: #f8f9fa; padding: 2rem; border-radius: 4px;">
+                        <img src="${imagePath}" alt="Imagen" 
+                             style="max-width: 100%; max-height: 400px; border: 1px solid #ddd; border-radius: 4px;" 
+                             onload="
+                                // Ajustar tamaño para imágenes pequeñas
+                                if (this.naturalWidth < 300 || this.naturalHeight < 150) {
+                                    this.style.minWidth = '300px';
+                                    this.style.maxHeight = '400px';
+                                } else {
+                                    this.style.minWidth = '';
+                                }
+                             "
+                             onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                        <div style="display: none; color: #666;">
+                            ❌ No se pudo cargar la imagen<br>
+                            <small>Ruta: ${imagePath}</small>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="text-align: center; margin-top: 2rem;">
+                    <button class="btn btn-primary" onclick="closeModal('image-viewer-modal')">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+function showComparisonModal(imageId, username, userText, adminText) {
+    const modalHtml = `
+        <div id="comparison-modal" class="modal" style="display: block;">
+            <div class="modal-content" style="max-width: 1000px;">
+                <h3>🔍 Comparación Detallada - Imagen ${imageId}</h3>
+                <h4 style="color: #666; margin-bottom: 2rem;">Usuario: ${username}</h4>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin: 2rem 0;">
+                    <div>
+                        <h4 style="color: #28a745; border-bottom: 2px solid #28a745; padding-bottom: 0.5rem;">
+                            👤 Texto del Usuario
+                        </h4>
+                        <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 8px; border-left: 4px solid #28a745; min-height: 200px; font-family: monospace; white-space: pre-wrap; line-height: 1.5;">
+${userText || 'N/A'}
+                        </div>
+                        <div style="margin-top: 1rem; font-size: 0.9em; color: #666;">
+                            <strong>Caracteres:</strong> ${(userText || '').length}
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <h4 style="color: #dc3545; border-bottom: 2px solid #dc3545; padding-bottom: 0.5rem;">
+                            👨‍💼 Texto del Admin
+                        </h4>
+                        <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 8px; border-left: 4px solid #dc3545; min-height: 200px; font-family: monospace; white-space: pre-wrap; line-height: 1.5;">
+${adminText || 'N/A'}
+                        </div>
+                        <div style="margin-top: 1rem; font-size: 0.9em; color: #666;">
+                            <strong>Caracteres:</strong> ${(adminText || '').length}
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="background: #fff3cd; padding: 1rem; border-radius: 8px; margin: 1rem 0; border-left: 4px solid #ffc107;">
+                    <h5 style="margin: 0 0 0.5rem 0; color: #856404;">💡 Diferencias Detectadas</h5>
+                    <p style="margin: 0; color: #856404;">
+                        Los textos son diferentes. Revisa cuidadosamente cuál versión es más precisa antes de consolidar.
+                    </p>
+                </div>
+                
+                <div style="text-align: center; margin-top: 2rem;">
+                    <button class="btn btn-secondary" onclick="closeModal('comparison-modal')" style="margin-right: 1rem;">
+                        Cerrar
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+async function consolidateAnnotation(userAnnotationId, adminAnnotationId, username) {
+    await adminPanel.consolidateAnnotation(userAnnotationId, adminAnnotationId, username);
+}
+
 async function logout() {
     try {
         const token = localStorage.getItem('access_token');
@@ -732,12 +1027,48 @@ function goToAnnotation() {
 
 // Cerrar modales al hacer click fuera de ellos
 window.addEventListener('click', function(event) {
-    const modals = document.querySelectorAll('.modal');
-    modals.forEach(modal => {
-        if (event.target === modal) {
-            modal.style.display = 'none';
+    // Solo procesar si el clic fue directamente en un modal (el fondo)
+    if (event.target.classList.contains('modal')) {
+        const modalId = event.target.id;
+        if (modalId) {
+            closeModal(modalId);
+        } else {
+            // Para modales dinámicos sin ID específico, cerrarlos directamente
+            event.target.style.display = 'none';
+            if (event.target.id && (
+                event.target.id.includes('-stats-modal') || 
+                event.target.id.includes('-annotations-modal') || 
+                event.target.id.includes('loading-modal') ||
+                event.target.id.includes('image-viewer-modal') ||
+                event.target.id.includes('comparison-modal') ||
+                event.target.id.includes('transfer-annotations-modal')
+            )) {
+                event.target.remove();
+            }
         }
-    });
+    }
+});
+
+// Event delegation para botones de cerrar en modales dinámicos
+document.addEventListener('click', function(event) {
+    // Si el clic fue en un elemento con onclick que contiene "closeModal"
+    if (event.target.onclick && event.target.onclick.toString().includes('closeModal')) {
+        // No hacer nada adicional, dejar que el onclick funcione normalmente
+        return;
+    }
+    
+    // Manejar clicks en botones de cerrar que puedan no tener event listeners
+    if (event.target.matches('button[onclick*="closeModal"]')) {
+        const onclickAttr = event.target.getAttribute('onclick');
+        if (onclickAttr) {
+            // Extraer el modalId del onclick
+            const match = onclickAttr.match(/closeModal\('([^']+)'\)/);
+            if (match) {
+                event.preventDefault();
+                closeModal(match[1]);
+            }
+        }
+    }
 });
 
 // ========== FUNCIONES DE GESTIÓN DE USUARIOS ==========
@@ -780,6 +1111,7 @@ async function manageUserAnnotations(userId, username) {
 }
 
 function showAnnotationsManagementModal(userId, username, annotations) {
+    const ImageName = annotations.length > 0 ? annotations[0].image_path.split('/').pop() : 'N/A';
     const modalHtml = `
         <div id="annotations-management-modal" class="modal" style="display: block;">
             <div class="modal-content" style="max-width: 900px;">
@@ -815,10 +1147,10 @@ function showAnnotationsManagementModal(userId, username, annotations) {
                             ${annotations.map(annotation => `
                                 <tr>
                                     <td>${annotation.annotation_id}</td>
-                                    <td title="${annotation.image_path}">
-                                        ${annotation.image_path.length > 30 ? 
-                                          annotation.image_path.substring(0, 30) + '...' : 
-                                          annotation.image_path}
+                                    <td title="${ImageName}">
+                                        ${ImageName > 30 ? 
+                                          ImageName.substring(0, 30) + '...' : 
+                                          ImageName}
                                     </td>
                                     <td>
                                         <span class="status-badge status-${annotation.status}">${annotation.status}</span>

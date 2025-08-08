@@ -241,6 +241,7 @@ class UIManager {
     showCompletion() {
         document.getElementById('workArea').classList.add('hidden');
         document.getElementById('completionDiv').classList.remove('hidden');
+        console.log('All tasks completed, showing completion message');
     }
 
     showError(message) {

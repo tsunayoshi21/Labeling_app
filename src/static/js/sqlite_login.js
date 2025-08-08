@@ -103,7 +103,7 @@ async function handleLoginForm(e) {
 // Inicializar la página de login cuando el DOM esté listo
 document.addEventListener('DOMContentLoaded', function() {
     // Verificar si ya está autenticado
-    checkExistingAuth();
+    //checkExistingAuth();
     
     // Configurar el formulario de login
     const loginForm = document.getElementById('login-form');

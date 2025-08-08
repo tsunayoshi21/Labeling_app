@@ -66,7 +66,7 @@ class Config:
         from logging.handlers import RotatingFileHandler
         
         # Obtener el nivel de logging
-        level = getattr(logging, self.LOG_LEVEL, logging.INFO)
+        level = getattr(logging, self.LOG_LEVEL, logging.DEBUG)
         
         # Crear formateador
         formatter = logging.Formatter(self.LOG_FORMAT)

@@ -87,15 +87,6 @@ def create_app():
         """Página de login - redirige si ya está autenticado"""
         logger.debug("Acceso a página de login")
         
-        # Si ya está autenticado, redirigir según rol
-        if hasattr(request, 'current_user') and request.current_user:
-            user = request.current_user
-            logger.debug(f"Usuario {user.get('username')} ya autenticado, redirigiendo")
-            if user.get('role') == 'admin':
-                return redirect('/admin')
-            else:
-                return redirect('/')
-        
         return render_template('sqlite_login.html')
     
     @app.route('/admin')

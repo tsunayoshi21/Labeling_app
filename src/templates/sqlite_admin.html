@@ -610,6 +610,64 @@
         .table td:last-child {
             min-width: 200px; /* Asegurar espacio para botones de acción */
         }
+        
+        /* Estilos para estadísticas de agreement */
+        .agreement-cell {
+            text-align: center;
+            font-weight: 500;
+        }
+        
+        .agreement-percentage {
+            padding: 0.25rem 0.5rem;
+            border-radius: 3px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            display: inline-block;
+            min-width: 45px;
+        }
+        
+        .agreement-high {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .agreement-medium {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .agreement-low {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .agreement-loading {
+            color: #6c757d;
+            font-size: 0.8rem;
+            animation: pulse 1.5s infinite;
+        }
+        
+        .agreement-na {
+            color: #6c757d;
+            font-size: 0.8rem;
+            font-style: italic;
+        }
+        
+        .agreement-no-data {
+            color: #6c757d;
+            font-size: 1rem;
+        }
+        
+        .agreement-error {
+            color: #dc3545;
+            font-size: 0.8rem;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
     </style>
 </head>
 <body>
@@ -728,6 +786,7 @@
                         <th>ID</th>
                         <th>Usuario</th>
                         <th>Rol</th>
+                        <th>Agreement c/ Admin</th>
                         <th>Acciones</th>
                     </tr>
                 </thead>
@@ -765,11 +824,24 @@
         <!-- Tab: Control de Calidad -->
         <div id="quality-tab" class="tab-content">
             <div class="section-header">
-                <h2>Control de Calidad</h2>
+                <h2>🔍 Control de Calidad</h2>
+                <button class="btn btn-primary" onclick="adminPanel.loadQualityControl()">🔄 Actualizar</button>
             </div>
             
-            <div id="quality-analysis">
-                <!-- Análisis de calidad cargado dinámicamente -->
+            <div style="background: #e8f4f8; padding: 1rem; border-radius: 8px; margin-bottom: 2rem; border-left: 4px solid #17a2b8;">
+                <h4 style="margin: 0 0 0.5rem 0; color: #0c5460;">ℹ️ ¿Qué es el Control de Calidad?</h4>
+                <p style="margin: 0; color: #0c5460;">
+                    Esta vista muestra las imágenes donde las anotaciones del admin difieren de las anotaciones de los usuarios. 
+                    Permite revisar y consolidar las diferencias, adoptando la versión del usuario cuando sea más precisa.
+                </p>
+            </div>
+            
+            <div id="quality-control-list">
+                <!-- Datos de control de calidad cargados dinámicamente -->
+                <div style="text-align: center; padding: 3rem; color: #666;">
+                    <div style="font-size: 3rem; margin-bottom: 1rem;">⏳</div>
+                    <p>Cargando datos de control de calidad...</p>
+                </div>
             </div>
         </div>
     </div>

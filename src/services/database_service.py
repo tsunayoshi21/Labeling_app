@@ -468,50 +468,12 @@ class DatabaseService:
                 func.sum(case((Annotation.status == 'discarded', 1), else_=0)).label('discarded')
             ).filter(Annotation.user_id == user_id).first()
             
-            # Consulta separada para estadísticas de comparación con admin
-            # Alias para las anotaciones
-            UserAnnotation = session.query(Annotation).filter(
-                and_(
-                    Annotation.user_id == user_id,
-                    Annotation.status.in_(['corrected', 'approved', 'discarded'])
-                )
-            ).subquery('user_ann')
-            
-            AdminAnnotation = session.query(Annotation).filter(
-                and_(
-                    Annotation.user_id == 1,
-                    Annotation.status.in_(['corrected', 'approved', 'discarded'])
-                )
-            ).subquery('admin_ann')
-            
-            # Anotaciones del usuario que también fueron revieweadas por admin (misma imagen)
-            reviewed_by_both = session.query(func.count(UserAnnotation.c.id)).filter(
-                exists().where(
-                    AdminAnnotation.c.image_id == UserAnnotation.c.image_id
-                )
-            ).scalar() or 0
-            
-            # Anotaciones con el mismo status entre usuario y admin (misma imagen y mismo texto corregido)
-            matching_with_admin = session.query(func.count(UserAnnotation.c.id)).filter(
-                exists().where(
-                    and_(
-                        AdminAnnotation.c.image_id == UserAnnotation.c.image_id,
-                        AdminAnnotation.c.corrected_text == UserAnnotation.c.corrected_text
-                    )
-                )
-            ).scalar() or 0
-            
-            # Calcular accuracy (porcentaje de coincidencias)
-            accuracy_with_admin = round((matching_with_admin / reviewed_by_both * 100), 1) if reviewed_by_both > 0 else 0
-            
             stats = {
                 'total': result.total or 0,
                 'pending': result.pending or 0,
                 'corrected': result.corrected or 0,
                 'approved': result.approved or 0,
                 'discarded': result.discarded or 0,
-                'reviewed_by_admin_count': reviewed_by_both,
-                'accuracy_with_admin': accuracy_with_admin
             }
             return stats
         finally:
@@ -876,5 +838,330 @@ class DatabaseService:
             session.rollback()
             logger.error(f"Error transfiriendo anotaciones: {e}")
             return {'success': False, 'error': str(e)}
+        finally:
+            session.close()
+    
+    # Métodos para Control de Calidad
+    def get_quality_control_annotations(self) -> List[dict]:
+        """Obtiene anotaciones para control de calidad: mismo image_id anotado por admin y otro usuario con respuestas distintas"""
+        session = self.get_session()
+        try:
+            from sqlalchemy import and_, func, or_
+            
+            # Primero, encontrar imágenes que tienen anotaciones tanto del admin como de otros usuarios
+            admin_user = session.query(User).filter_by(role='admin').first()
+            if not admin_user:
+                logger.warning("No se encontró usuario admin para control de calidad")
+                return []
+
+            # Subconsulta para obtener anotaciones del admin (no pending)
+            admin_annotations = session.query(
+                Annotation.image_id,
+                Annotation.corrected_text.label('admin_text'),
+                Annotation.status.label('admin_status'),
+                Annotation.id.label('admin_annotation_id'),
+                Annotation.updated_at.label('admin_updated_at')
+            ).filter(
+                and_(
+                    Annotation.user_id == admin_user.id,
+                    Annotation.status != 'pending'
+                )
+            ).subquery()
+
+            # Consulta principal: buscar anotaciones de usuarios (no admin, no pending) 
+            # que tengan una anotación correspondiente del admin en la misma imagen
+            # y que el texto corregido sea diferente o uno de los dos sea NULL
+            quality_data = session.query(
+                Annotation,
+                Image,
+                User,
+                admin_annotations.c.admin_text,
+                admin_annotations.c.admin_status,
+                admin_annotations.c.admin_annotation_id,
+                admin_annotations.c.admin_updated_at
+            ).join(Image, Annotation.image_id == Image.id)\
+            .join(User, Annotation.user_id == User.id)\
+            .join(admin_annotations, Annotation.image_id == admin_annotations.c.image_id)\
+            .filter(
+                and_(
+                    Annotation.user_id != admin_user.id,
+                    Annotation.status != 'pending',
+                    admin_annotations.c.admin_status != 'pending',
+                    or_(
+                        # Uno es NULL y el otro no
+                        and_(
+                            Annotation.corrected_text.is_(None),
+                            admin_annotations.c.admin_text.isnot(None)
+                        ),
+                        and_(
+                            Annotation.corrected_text.isnot(None),
+                            admin_annotations.c.admin_text.is_(None)
+                        ),
+                        # O ambos tienen valor y son diferentes
+                        Annotation.corrected_text != admin_annotations.c.admin_text
+                    )
+                )
+            ).order_by(Annotation.updated_at.desc()).all()
+            # Crear lista de resultados
+            results = []
+            for annotation, image, user, admin_text, admin_status, admin_annotation_id, admin_updated_at in quality_data:
+                logger.debug(f"Control de calidad: {user.username} - {image.image_path} - {annotation.status} vs {admin_status}")
+                # Determinar el texto final del usuario (corrected_text o texto original de la imagen)
+                user_final_text = annotation.corrected_text if annotation.corrected_text else "NULL"
+                admin_final_text = admin_text if admin_text else "NULL"
+                
+                results.append({
+                    'annotation_id': annotation.id,
+                    'image_id': image.id,
+                    'image_path': image.image_path,
+                    'initial_ocr_text': image.initial_ocr_text,
+                    'user_id': user.id,
+                    'username': user.username,
+                    'user_annotation_text': user_final_text,
+                    'user_status': annotation.status,
+                    'user_updated_at': annotation.updated_at.isoformat() if annotation.updated_at else None,
+                    'admin_annotation_id': admin_annotation_id,
+                    'admin_annotation_text': admin_final_text,
+                    'admin_status': admin_status,
+                    'admin_updated_at': admin_updated_at.isoformat() if admin_updated_at else None
+                })
+            
+            logger.info(f"Control de calidad: encontradas {len(results)} discrepancias")
+            return results
+            
+        except Exception as e:
+            logger.error(f"Error obteniendo datos de control de calidad: {e}")
+            return []
+        finally:
+            session.close()
+
+    def consolidate_annotation(self, user_annotation_id: int, admin_annotation_id: int) -> bool:
+        """Consolida una anotación: actualiza la anotación del admin con el texto del usuario"""
+        session = self.get_session()
+        try:
+            # Obtener ambas anotaciones
+            user_annotation = session.query(Annotation).filter_by(id=user_annotation_id).first()
+            admin_annotation = session.query(Annotation).filter_by(id=admin_annotation_id).first()
+            
+            if not user_annotation or not admin_annotation:
+                logger.warning(f"Anotaciones no encontradas para consolidación: user={user_annotation_id}, admin={admin_annotation_id}")
+                return False
+            
+            # Verificar que corresponden a la misma imagen
+            if user_annotation.image_id != admin_annotation.image_id:
+                logger.warning(f"Las anotaciones no corresponden a la misma imagen: user_image={user_annotation.image_id}, admin_image={admin_annotation.image_id}")
+                return False
+            
+            # Obtener el texto final del usuario
+            user_final_text = user_annotation.corrected_text
+            if not user_final_text:
+                # Si el usuario no tiene texto corregido, usar el texto original de la imagen
+                image = session.query(Image).filter_by(id=user_annotation.image_id).first()
+                user_final_text = image.initial_ocr_text if image else None
+            
+            if not user_final_text:
+                logger.warning(f"No se pudo determinar el texto final del usuario para consolidación")
+                return False
+            
+            success = self.update_annotation(admin_annotation_id, admin_annotation.user_id, user_annotation.status, user_final_text)
+            # Actualizar la anotación del admin
+            # admin_annotation.corrected_text = user_final_text
+            # admin_annotation.status = 'corrected'  # Marcar como corregida
+            # admin_annotation.updated_at = datetime.now(timezone.utc)
+            
+            session.commit()
+            if not success:
+                logger.error(f"Error actualizando anotación del admin {admin_annotation_id} con texto del usuario {user_annotation_id}")
+                return False
+            logger.info(f"Anotación consolidada exitosamente: admin_annotation={admin_annotation_id} actualizada con texto de user_annotation={user_annotation_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error consolidando anotación: {e}")
+            session.rollback()
+            return False
+        finally:
+            session.close()
+
+    def get_annotation_with_image(self, annotation_id: int, user_id: int = None) -> Optional[Tuple[Annotation, Image]]:
+        """Obtiene una anotación con su imagen asociada"""
+        session = self.get_session()
+        try:
+            query = session.query(Annotation).join(Image).filter(Annotation.id == annotation_id)
+            if user_id:
+                query = query.filter(Annotation.user_id == user_id)
+            
+            annotation = query.first()
+            if annotation:
+                image = annotation.image
+                
+                # Crear instancias desvinculadas
+                detached_annotation = Annotation()
+                detached_annotation.id = annotation.id
+                detached_annotation.image_id = annotation.image_id
+                detached_annotation.user_id = annotation.user_id
+                detached_annotation.corrected_text = annotation.corrected_text
+                detached_annotation.status = annotation.status
+                detached_annotation.updated_at = annotation.updated_at
+                
+                detached_image = Image()
+                detached_image.id = image.id
+                detached_image.image_path = image.image_path
+                detached_image.initial_ocr_text = image.initial_ocr_text
+                
+                return (detached_annotation, detached_image)
+            return None
+        finally:
+            session.close()
+    
+    def calculate_user_admin_agreement(self, user_id: int) -> float:
+        """Calcula el porcentaje de agreement entre un usuario y el admin"""
+        session = self.get_session()
+        try:
+            from sqlalchemy import and_, func
+            
+            # Obtener el ID del admin
+            admin = session.query(User).filter_by(role='admin').first()
+            if not admin:
+                return 0.0
+            
+            # Query para encontrar imágenes anotadas por ambos (usuario y admin)
+            # donde ambos hayan completado la anotación (no pending)
+            user_annotations = session.query(Annotation).filter(
+                and_(
+                    Annotation.user_id == user_id,
+                    Annotation.status.in_(['corrected', 'approved', 'discarded']),
+                    Annotation.corrected_text.isnot(None)
+                )
+            ).subquery()
+            
+            admin_annotations = session.query(Annotation).filter(
+                and_(
+                    Annotation.user_id == admin.id,
+                    Annotation.status.in_(['corrected', 'approved', 'discarded']),
+                    Annotation.corrected_text.isnot(None)
+                )
+            ).subquery()
+            
+            # Encontrar imágenes donde ambos tienen anotaciones completadas
+            common_images = session.query(
+                user_annotations.c.image_id,
+                user_annotations.c.corrected_text.label('user_text'),
+                admin_annotations.c.corrected_text.label('admin_text')
+            ).join(
+                admin_annotations,
+                user_annotations.c.image_id == admin_annotations.c.image_id
+            ).all()
+            
+            if not common_images:
+                return 0.0
+            
+            # Contar agreements (textos idénticos)
+            agreements = 0
+            total_comparisons = len(common_images)
+            
+            for image_id, user_text, admin_text in common_images:
+                # Normalizar textos para comparación (strip whitespace, lowercase)
+                user_text_norm = (user_text or '').strip().lower()
+                admin_text_norm = (admin_text or '').strip().lower()
+                
+                if user_text_norm == admin_text_norm:
+                    agreements += 1
+            
+            # Calcular porcentaje
+            agreement_percentage = (agreements / total_comparisons * 100) if total_comparisons > 0 else 0.0
+            
+            logger.debug(f"Agreement para usuario {user_id}: {agreements}/{total_comparisons} = {agreement_percentage:.1f}%")
+            
+            return round(agreement_percentage, 1)
+            
+        except Exception as e:
+            logger.error(f"Error calculando agreement para usuario {user_id}: {e}")
+            return 0.0
+        finally:
+            session.close()
+
+    def get_all_users_agreement_stats(self) -> dict:
+        """Obtiene estadísticas de agreement para todos los usuarios (optimizado)"""
+        session = self.get_session()
+        try:
+            from sqlalchemy import and_, func, case
+            
+            # Obtener el ID del admin
+            admin = session.query(User).filter_by(role='admin').first()
+            if not admin:
+                return {}
+            
+            # Query optimizada para calcular agreements de todos los usuarios de una vez
+            # Subconsulta para anotaciones de usuarios (no admin)
+            user_annotations = session.query(
+                Annotation.user_id,
+                Annotation.image_id,
+                Annotation.corrected_text.label('user_text')
+            ).filter(
+                and_(
+                    Annotation.user_id != admin.id,
+                    Annotation.status.in_(['corrected', 'approved', 'discarded'])                    
+                )
+            ).subquery()
+            
+            # Subconsulta para anotaciones del admin
+            admin_annotations = session.query(
+                Annotation.image_id,
+                Annotation.corrected_text.label('admin_text')
+            ).filter(
+                and_(
+                    Annotation.user_id == admin.id,
+                    Annotation.status.in_(['corrected', 'approved', 'discarded'])
+                )
+            ).subquery()
+            
+            # Unir anotaciones de usuarios con anotaciones del admin
+            comparisons = session.query(
+                user_annotations.c.user_id,
+                user_annotations.c.user_text,
+                admin_annotations.c.admin_text,
+                admin_annotations.c.image_id
+            ).join(
+                admin_annotations,
+                user_annotations.c.image_id == admin_annotations.c.image_id
+            ).all()
+            
+            # Procesar resultados para calcular agreements por usuario
+            user_stats = {}
+            for user_id, user_text, admin_text, image_id in comparisons:
+                if user_id not in user_stats:
+                    user_stats[user_id] = {'total': 0, 'agreements': 0}
+                
+                user_stats[user_id]['total'] += 1
+                #logger.debug(f"Comparando image_id {image_id} para usuario {user_id}. Texto usuario: {user_text}, Texto admin: {admin_text}.")
+                
+                # Normalizar textos para comparación
+                user_text_norm = (user_text if user_text else 'NULL')
+                admin_text_norm = (admin_text if admin_text else 'NULL')
+
+                if user_text_norm == admin_text_norm:
+                    user_stats[user_id]['agreements'] += 1
+                    #logger.debug(f"Agreement encontrado para usuario {user_id} en image_id {image_id}")
+                else:
+                    logger.debug(f"No agreement para usuario {user_id} en image_id {image_id}. Texto usuario: {user_text_norm}, Texto admin: {admin_text_norm}")
+
+            
+            # Calcular porcentajes
+            result = {}
+            for user_id, stats in user_stats.items():
+                agreement_pct = (stats['agreements'] / stats['total'] * 100) if stats['total'] > 0 else 0.0
+                result[user_id] = {
+                    'agreement_percentage': round(agreement_pct, 1),
+                    'total_comparisons': stats['total'],
+                    'agreements': stats['agreements']
+                }
+            
+            logger.debug(f"Agreement stats calculadas para {len(result)} usuarios")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error calculando agreement stats: {e}")
+            return {}
         finally:
             session.close()
