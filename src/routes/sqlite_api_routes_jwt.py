@@ -1,10 +1,14 @@
 """
 Rutas API para la aplicación de anotación colaborativa con SQLite con JWT Auth
 """
+import os
+import logging
+from datetime import datetime
 from flask import Blueprint, request, jsonify
 from services.database_service import DatabaseService
 from services.jwt_service import jwt_required, admin_required, jwt_service
 from services.security_utils import rate_limit, validate_json_input, SecurityUtils
+from services.notification_service import notification_service
 import time
 import logging
 
@@ -21,6 +25,34 @@ db_service = DatabaseService()
 
 # Instancia de utilidades de seguridad
 security = SecurityUtils()
+
+# Middleware para logging de códigos de estado HTTP
+@api_bp.after_request
+def log_response_status(response):
+    """Middleware que registra el código de estado HTTP de cada respuesta"""
+    endpoint = request.endpoint or 'unknown'
+    method = request.method
+    path = request.path
+    status_code = response.status_code
+    
+    # Obtener información del usuario si está disponible
+    user_info = ""
+    if hasattr(request, 'current_user') and request.current_user:
+        username = request.current_user.get('username', 'unknown')
+        role = request.current_user.get('role', 'unknown')
+        user_info = f" | Usuario: {username} ({role})"
+    
+    # Log con nivel apropiado según el código de estado
+    if 200 <= status_code < 300:
+        logger.info(f"HTTP {status_code} | {method} {path}{user_info}")
+    elif 300 <= status_code < 400:
+        logger.info(f"HTTP {status_code} | {method} {path}{user_info}")
+    elif 400 <= status_code < 500:
+        logger.warning(f"HTTP {status_code} | {method} {path}{user_info}")
+    else:  # 500+
+        logger.error(f"HTTP {status_code} | {method} {path}{user_info}")
+    
+    return response
 
 # Rutas de autenticación
 @api_bp.route('/login', methods=['POST'])
@@ -146,6 +178,10 @@ def get_next_task():
     if task_data:
         annotation, image = task_data
         logger.info(f"Tarea asignada a {username}: anotación {annotation.id}, imagen {image.id}")
+        
+        # Marcar que el usuario tiene tareas disponibles (resetea estado de notificación)
+        notification_service.mark_user_has_tasks(user_id, username)
+        
         return jsonify({
             'annotation_id': annotation.id,
             'image_id': image.id,
@@ -155,6 +191,17 @@ def get_next_task():
         })
     else:
         logger.info(f"No hay tareas pendientes para usuario: {username}")
+        
+        # Intentar enviar notificación al admin (con protección anti-spam)
+        try:
+            notification_sent = notification_service.send_no_tasks_notification(user_id, username)
+            if notification_sent:
+                logger.info(f"Notificación de 'sin tareas' enviada al admin para usuario: {username}")
+            else:
+                logger.debug(f"Notificación de 'sin tareas' no enviada (anti-spam o error) para usuario: {username}")
+        except Exception as e:
+            logger.error(f"Error enviando notificación de 'sin tareas' para usuario {username}: {e}")
+        
         return jsonify({'message': 'No pending tasks available'}), 204
 
 @api_bp.route('/task/history', methods=['GET'])
@@ -703,6 +750,54 @@ def transfer_user_annotations(from_user_id):
         logger.error(f"Error interno transfiriendo anotaciones para admin {admin_username}: {e}")
         return jsonify({'error': 'Failed to transfer annotations'}), 500
 
+# Rutas de Control de Calidad
+@api_bp.route('/admin/quality-control', methods=['GET'])
+@admin_required
+def get_quality_control_annotations():
+    """Obtiene anotaciones para control de calidad: misma imagen anotada por admin y usuario con textos diferentes"""
+    admin_username = request.current_user['username']
+    
+    logger.debug(f"Admin {admin_username} solicitando datos de control de calidad")
+    
+    quality_data = db_service.get_quality_control_annotations()
+    
+    logger.debug(f"Admin {admin_username} obtuvo {len(quality_data)} discrepancias para control de calidad")
+    
+    return jsonify({
+        'quality_control_data': quality_data,
+        'total_discrepancies': len(quality_data)
+    })
+
+@api_bp.route('/admin/quality-control/consolidate', methods=['POST'])
+@admin_required
+@validate_json_input(required_fields=['user_annotation_id', 'admin_annotation_id'])
+def consolidate_annotation():
+    """Consolida una anotación: actualiza la anotación del admin con el texto del usuario"""
+    data = request.get_json()
+    admin_username = request.current_user['username']
+    
+    try:
+        user_annotation_id = data['user_annotation_id']
+        admin_annotation_id = data['admin_annotation_id']
+        
+        logger.info(f"Admin {admin_username} consolidando anotación: user={user_annotation_id}, admin={admin_annotation_id}")
+        
+        success = db_service.consolidate_annotation(user_annotation_id, admin_annotation_id)
+        
+        if success:
+            logger.info(f"Admin {admin_username} consolidó anotación exitosamente")
+            return jsonify({
+                'success': True,
+                'message': 'Annotation consolidated successfully'
+            })
+        else:
+            logger.warning(f"Fallo consolidando anotación por admin {admin_username}")
+            return jsonify({'error': 'Failed to consolidate annotation'}), 400
+            
+    except Exception as e:
+        logger.error(f"Error consolidando anotación por admin {admin_username}: {e}")
+        return jsonify({'error': 'Failed to consolidate annotation'}), 500
+
 # Endpoint para análisis de rendimiento (solo para desarrollo)
 @api_bp.route('/dev/performance', methods=['GET'])
 @jwt_required
@@ -784,3 +879,151 @@ def internal_error(error):
 @api_bp.errorhandler(429)
 def rate_limit_exceeded(error):
     return jsonify({'error': 'Rate limit exceeded. Please try again later.'}), 429
+
+@api_bp.route('/admin/users/agreement-stats', methods=['GET'])
+@admin_required
+def get_users_agreement_stats():
+    """Obtiene estadísticas de agreement con el admin para todos los usuarios"""
+    admin_username = request.current_user['username']
+    
+    logger.debug(f"Admin {admin_username} solicitando estadísticas de agreement")
+    
+    try:
+        # Obtener estadísticas de agreement para todos los usuarios
+        agreement_stats = db_service.get_all_users_agreement_stats()
+        
+        logger.debug(f"Admin {admin_username} obtuvo estadísticas de agreement para {len(agreement_stats)} usuarios")
+        
+        return jsonify({
+            'success': True,
+            'agreement_stats': agreement_stats
+        })
+        
+    except Exception as e:
+        logger.error(f"Error obteniendo estadísticas de agreement: {e}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+# Rutas de gestión de notificaciones
+@api_bp.route('/admin/notifications/status', methods=['GET'])
+@admin_required
+def get_notifications_status():
+    """Obtiene el estado de las notificaciones para todos los usuarios"""
+    admin_username = request.current_user['username']
+    
+    logger.debug(f"Admin {admin_username} solicitando estado de notificaciones")
+    
+    try:
+        # Obtener todos los usuarios
+        users = db_service.get_all_users()
+        
+        notification_statuses = []
+        for user in users:
+            status = notification_service.get_notification_status(user.id)
+            status['username'] = user.username
+            status['role'] = user.role
+            notification_statuses.append(status)
+        
+        logger.debug(f"Admin {admin_username} obtuvo estado de notificaciones para {len(notification_statuses)} usuarios")
+        
+        return jsonify({
+            'success': True,
+            'notification_statuses': notification_statuses
+        })
+        
+    except Exception as e:
+        logger.error(f"Error obteniendo estado de notificaciones: {e}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+@api_bp.route('/admin/notifications/reset/<int:user_id>', methods=['POST'])
+@admin_required
+def reset_user_notification_status(user_id):
+    """Resetea el estado de notificación para un usuario específico"""
+    admin_username = request.current_user['username']
+    
+    logger.debug(f"Admin {admin_username} reseteando estado de notificación para usuario ID: {user_id}")
+    
+    try:
+        # Verificar que el usuario existe
+        user = db_service.get_user_by_id(user_id)
+        if not user:
+            return jsonify({'error': 'Usuario no encontrado'}), 404
+        
+        # Resetear estado de notificación
+        notification_service.mark_user_has_tasks(user_id, user.username)
+        
+        logger.info(f"Admin {admin_username} reseteó estado de notificación para usuario {user.username} (ID: {user_id})")
+        
+        return jsonify({
+            'success': True,
+            'message': f'Estado de notificación reseteado para usuario {user.username}'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error reseteando estado de notificación: {e}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+@api_bp.route('/admin/notifications/test', methods=['POST'])
+@admin_required
+@validate_json_input(optional_fields=['message'])
+def test_notification():
+    """Envía una notificación de prueba al admin"""
+    admin_username = request.current_user['username']
+    data = request.get_json()
+    
+    custom_message = data.get('message', 'Esta es una notificación de prueba desde la aplicación de anotaciones.')
+    
+    logger.debug(f"Admin {admin_username} enviando notificación de prueba")
+    
+    try:
+        success = notification_service.send_admin_notification(
+            f"🧪 <b>Notificación de Prueba</b>\n\n"
+            f"👤 <b>Enviado por:</b> {admin_username}\n"
+            f"📝 <b>Mensaje:</b> {custom_message}\n"
+            f"⏰ <b>Hora:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        )
+        
+        if success:
+            logger.info(f"Admin {admin_username} envió notificación de prueba exitosamente")
+            return jsonify({
+                'success': True,
+                'message': 'Notificación de prueba enviada exitosamente'
+            })
+        else:
+            logger.warning(f"Error enviando notificación de prueba para admin {admin_username}")
+            return jsonify({
+                'success': False,
+                'error': 'Error enviando notificación de prueba'
+            }), 500
+        
+    except Exception as e:
+        logger.error(f"Error enviando notificación de prueba: {e}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+@api_bp.route('/admin/notifications/config', methods=['GET'])
+@admin_required
+def get_notification_config():
+    """Obtiene la configuración actual de notificaciones"""
+    admin_username = request.current_user['username']
+    
+    logger.debug(f"Admin {admin_username} solicitando configuración de notificaciones")
+    
+    try:
+        config = {
+            'min_notification_interval_seconds': notification_service.min_notification_interval,
+            'min_notification_interval_hours': notification_service.min_notification_interval / 3600,
+            'notification_timeout_seconds': notification_service.notification_timeout,
+            'notification_timeout_hours': notification_service.notification_timeout / 3600,
+            'telegram_configured': bool(os.getenv('TELEGRAM_BOT_TOKEN') and 
+                                      os.getenv('TELEGRAM_BOT_TOKEN') != "123456789:ABCdefGhIjKlMnOpQrStUvWxYz" and
+                                      os.getenv('TELEGRAM_ADMIN_CHAT_ID') and 
+                                      os.getenv('TELEGRAM_ADMIN_CHAT_ID') != "123456789")
+        }
+        
+        return jsonify({
+            'success': True,
+            'config': config
+        })
+        
+    except Exception as e:
+        logger.error(f"Error obteniendo configuración de notificaciones: {e}")
+        return jsonify({'error': 'Error interno del servidor'}), 500

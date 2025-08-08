@@ -1138,19 +1138,31 @@ function showAnnotationsManagementModal(userId, username, annotations) {
                             <tr>
                                 <th>ID</th>
                                 <th>Imagen</th>
+                                <th>Texto Corregido</th>
                                 <th>Estado</th>
                                 <th>Última Actualización</th>
                                 <th>Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${annotations.map(annotation => `
+                            ${annotations.map(annotation => {
+                                const imageName = annotation.image_path.split('/').pop();
+                                const correctedText = annotation.corrected_text || annotation.annotation_text || '';
+                                const displayText = correctedText.length > 50 ? 
+                                    correctedText.substring(0, 50) + '...' : correctedText;
+                                
+                                return `
                                 <tr>
                                     <td>${annotation.annotation_id}</td>
-                                    <td title="${ImageName}">
-                                        ${ImageName > 30 ? 
-                                          ImageName.substring(0, 30) + '...' : 
-                                          ImageName}
+                                    <td>
+                                        <button class="btn btn-secondary btn-sm" onclick="showImageModal('${annotation.image_path}', '${(annotation.initial_ocr_text || '').replace(/'/g, "\\'")}')">
+                                            👁️ Ver Imagen
+                                        </button>
+                                    </td>
+                                    <td title="${correctedText}" style="text-align: center;">
+                                        <div style="font-family: monospace; font-size: 0.9em; max-width: 200px; word-break: break-word; margin: 0 auto;">
+                                            ${displayText || 'N/A'}
+                                        </div>
                                     </td>
                                     <td>
                                         <span class="status-badge status-${annotation.status}">${annotation.status}</span>
@@ -1163,7 +1175,8 @@ function showAnnotationsManagementModal(userId, username, annotations) {
                                         </button>
                                     </td>
                                 </tr>
-                            `).join('')}
+                                `;
+                            }).join('')}
                         </tbody>
                     </table>
                 </div>
