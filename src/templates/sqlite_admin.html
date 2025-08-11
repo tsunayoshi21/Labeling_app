@@ -4,880 +4,117 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Panel de Administración</title>
+    <!-- Critical CSS inline -->
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #f5f7fa;
-            color: #333;
-        }
-        
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 1rem 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        
-        .header h1 {
-            font-size: 1.5rem;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
-            font-weight: 600;
-            letter-spacing: -0.5px;
-        }
-        
-        .nav-tabs {
-            display: flex;
-            gap: 1rem;
-            margin: 2rem 2rem 0;
-        }
-        
-        .nav-tab {
-            padding: 0.75rem 1.5rem;
-            background: white;
-            border: none;
-            border-radius: 5px 5px 0 0;
-            cursor: pointer;
-            font-weight: 500;
-            transition: background-color 0.3s;
-        }
-        
-        .nav-tab.active {
-            background: #667eea;
-            color: white;
-        }
-        
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 2rem;
-            background: white;
-            margin-top: 0;
-            min-height: calc(100vh - 200px);
-        }
-        
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin-bottom: 2rem;
-        }
-        
-        .stat-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 1.5rem;
-            border-radius: 10px;
-            text-align: center;
-        }
-        
-        .stat-number {
-            font-size: 2rem;
-            font-weight: bold;
-        }
-        
-        .tab-content {
-            display: none;
-        }
-        
-        .tab-content.active {
-            display: block;
-        }
-        
-        .section-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 2rem;
-        }
-        
-        .btn {
-            padding: 0.5rem 1rem;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-weight: 500;
-            transition: transform 0.2s;
-        }
-        
-        .btn:hover {
-            transform: translateY(-1px);
-        }
-        
-        .btn-primary {
-            background: #667eea;
-            color: white;
-        }
-        
-        .btn-success {
-            background: #28a745;
-            color: white;
-        }
-        
-        .btn-danger {
-            background: #dc3545;
-            color: white;
-        }
-        
-        .table {
-            width: 100%;
-            border-collapse: collapse;
-            background: white;
-            border-radius: 5px;
-            overflow: hidden;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        
-        .table th,
-        .table td {
-            padding: 1rem;
-            text-align: left;
-            border-bottom: 1px solid #e1e5e9;
-        }
-        
-        .table th {
-            background: #f8f9fa;
-            font-weight: 600;
-        }
-        
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.5);
-            z-index: 1000;
-        }
-        
-        .modal-content {
-            background: white;
-            max-width: 500px;
-            margin: 10% auto;
-            padding: 2rem;
-            border-radius: 10px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-        }
-        
-        .form-group {
-            margin-bottom: 1rem;
-        }
-        
-        .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-weight: 500;
-        }
-        
-        .form-group input,
-        .form-group select,
-        .form-group textarea {
-            width: 100%;
-            padding: 0.75rem;
-            border: 1px solid #e1e5e9;
-            border-radius: 5px;
-            font-size: 1rem;
-        }
-        
-        .assignment-form {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 2rem;
-            margin-bottom: 2rem;
-        }
-        
-        .user-list,
-        .image-list {
-            border: 1px solid #e1e5e9;
-            border-radius: 5px;
-            max-height: 300px;
-            overflow-y: auto;
-            padding: 1rem;
-        }
-        
-        .checkbox-item {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            margin-bottom: 0.5rem;
-        }
-        
-        .status-badge {
-            padding: 0.25rem 0.5rem;
-            border-radius: 3px;
-            font-size: 0.8rem;
-            font-weight: 500;
-        }
-        
-        .status-pending {
-            background: #fff3cd;
-            color: #856404;
-        }
-        
-        .status-corrected {
-            background: #d4edda;
-            color: #155724;
-        }
-        
-        .status-approved {
-            background: #cce5ff;
-            color: #004085;
-        }
-        
-        .status-discarded {
-            background: #f8d7da;
-            color: #721c24;
-        }
-        
-        .assignment-section {
-            background: #f8f9fa;
-            padding: 1.5rem;
-            border-radius: 8px;
-            margin-bottom: 1rem;
-        }
-        
-        .auto-assignment-form {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr auto;
-            gap: 1rem;
-            align-items: end;
-            margin-bottom: 1rem;
-        }
-        
-        .auto-assignment-form .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-weight: 500;
-        }
-        
-        .auto-assignment-form input[type="radio"] {
-            margin-right: 0.5rem;
-        }
-        
-        .message {
-            padding: 1rem;
-            border-radius: 5px;
-            margin: 1rem 0;
-        }
-        
-        .message.success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        
-        .message.error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        
-        /* Estilos para actividad reciente */
-        .activity-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1.25rem;
-            background: white;
-            border-radius: 8px;
-            margin-bottom: 0.5rem;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-        }
-        
-        .activity-item:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-        }
-        
-        .activity-user {
-            flex: 1;
-            min-width: 150px;
-        }
-        
-        .user-name {
-            font-weight: 600;
-            color: #333;
-            margin-bottom: 0.2rem;
-        }
-        
-        .activity-date {
-            font-size: 0.85rem;
-            color: #666;
-        }
-        
-        .activity-stats {
-            display: flex;
-            gap: 1rem;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-        
-        .stat-item {
-            text-align: center;
-            min-width: 70px;
-        }
-        
-        .stat-item .stat-number {
-            display: block;
-            font-weight: 700;
-            font-size: 0.95rem;
-            color: #667eea;
-        }
-        
-        .stat-item .stat-number.stat-corrected {
-            color: #28a745;
-        }
-        
-        .stat-item .stat-number.stat-discarded {
-            color: #dc3545;
-        }
-        
-        .stat-item .stat-label {
-            display: block;
-            font-size: 0.7rem;
-            color: #666;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        .activity-empty {
-            text-align: center;
-            padding: 2rem;
-            color: #666;
-            font-style: italic;
-        }
-        
-        /* Estilos para la barra de progreso */
-        .progress-section {
-            margin: 2rem 0;
-            background: white;
-            padding: 1.5rem;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        
-        .progress-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
-        }
-        
-        .progress-header h3 {
-            margin: 0;
-            color: #333;
-            font-size: 1.2rem;
-        }
-        
-        .progress-text {
-            font-size: 0.9rem;
-            color: #666;
-            font-weight: 500;
-        }
-        
-        .progress-bar {
-            width: 100%;
-            height: 20px;
-            background-color: #e9ecef;
-            border-radius: 10px;
-            overflow: hidden;
-            position: relative;
-        }
-        
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-            border-radius: 10px;
-            transition: width 0.8s ease-in-out;
-            position: relative;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .progress-percentage {
-            color: white;
-            font-weight: 600;
-            font-size: 0.85rem;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.3);
-            position: absolute;
-            z-index: 2;
-        }
-        
-        .progress-fill::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.2) 50%, transparent 100%);
-            animation: shimmer 2s infinite;
-            z-index: 1;
-        }
-        
-        @keyframes shimmer {
-            0% {
-                transform: translateX(-100%);
-            }
-            100% {
-                transform: translateX(100%);
-            }
-        }
-        
-        /* Estilos adicionales para estadísticas de usuarios */
-        .table td {
-            vertical-align: middle;
-        }
-        
-        .table td:nth-child(4), 
-        .table td:nth-child(5) {
-            font-weight: 600;
-            color: #667eea;
-        }
-        
-        .btn-sm {
-            padding: 0.375rem 0.75rem;
-            font-size: 0.875rem;
-        }
-        
-        /* Modal de estadísticas específico */
-        #user-stats-modal .modal-content {
-            max-width: 700px;
-        }
-        
-        #user-stats-modal .stats-grid {
-            display: grid;
-            gap: 1rem;
-            margin: 1.5rem 0;
-        }
-        
-        #user-stats-modal .stat-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 1.5rem;
-            border-radius: 10px;
-            text-align: center;
-            min-height: 100px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-        }
-        
-        /* Estilos para botones de acción en la tabla de usuarios */
-        .action-buttons {
-            display: flex;
-            gap: 0.25rem;
-            flex-wrap: wrap;
-            justify-content: flex-start;
-        }
-        
-        .action-buttons .btn {
-            font-size: 0.75rem;
-            padding: 0.25rem 0.5rem;
-            white-space: nowrap;
-        }
-        
-        .btn-secondary {
-            background: #6c757d;
-            color: white;
-        }
-        
-        .btn-secondary:hover {
-            background: #5a6268;
-        }
-        
-        /* Estilos para el modal de gestión de anotaciones */
-        .management-actions {
-            border-left: 4px solid #667eea;
-        }
-        
-        .management-actions h4 {
-            margin-bottom: 0.5rem;
-            color: #333;
-        }
-        
-        .annotations-list {
-            border: 1px solid #e1e5e9;
-            border-radius: 8px;
-            margin: 1rem 0;
-        }
-        
-        .annotations-list .table {
-            margin: 0;
-            border-radius: 8px;
-        }
-        
-        .annotations-list .table th {
-            background: #667eea;
-            color: white;
-            border: none;
-            font-size: 0.9rem;
-        }
-        
-        .annotations-list .table td {
-            font-size: 0.85rem;
-            vertical-align: middle;
-        }
-        
-        /* Estilos específicos para estados de anotaciones */
-        .status-pending {
-            background: #fff3cd;
-            color: #856404;
-            border: 1px solid #ffeaa7;
-        }
-        
-        .status-corrected {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        
-        .status-approved {
-            background: #cce5ff;
-            color: #004085;
-            border: 1px solid #b3d7ff;
-        }
-        
-        .status-discarded {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        
-        /* Responsive para botones de acción */
-        @media (max-width: 768px) {
-            .action-buttons {
-                flex-direction: column;
-                gap: 0.125rem;
-            }
-            
-            .action-buttons .btn {
-                font-size: 0.7rem;
-                padding: 0.2rem 0.4rem;
-            }
-        }
-        
-        /* Estilos para el modal de transferencia */
-        .form-control {
-            width: 100%;
-            padding: 0.75rem;
-            border: 1px solid #e1e5e9;
-            border-radius: 5px;
-            font-size: 1rem;
-            transition: border-color 0.3s;
-        }
-        
-        .form-control:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.25);
-        }
-        
-        /* Mejorar espaciado en modales grandes */
-        .modal-content {
-            animation: modalSlideIn 0.3s ease-out;
-        }
-        
-        @keyframes modalSlideIn {
-            from {
-                opacity: 0;
-                transform: translateY(-50px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-        
-        /* Estilos para tabla responsive */
-        .table-responsive {
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-        }
-        
-        .table th:last-child,
-        .table td:last-child {
-            min-width: 200px; /* Asegurar espacio para botones de acción */
-        }
-        
-        /* Estilos para estadísticas de agreement */
-        .agreement-cell {
-            text-align: center;
-            font-weight: 500;
-        }
-        
-        .agreement-percentage {
-            padding: 0.25rem 0.5rem;
-            border-radius: 3px;
-            font-size: 0.8rem;
-            font-weight: 600;
-            display: inline-block;
-            min-width: 45px;
-        }
-        
-        .agreement-high {
-            background: #d4edda;
-            color: #155724;
-        }
-        
-        .agreement-medium {
-            background: #fff3cd;
-            color: #856404;
-        }
-        
-        .agreement-low {
-            background: #f8d7da;
-            color: #721c24;
-        }
-        
-        .agreement-loading {
-            color: #6c757d;
-            font-size: 0.8rem;
-            animation: pulse 1.5s infinite;
-        }
-        
-        .agreement-na {
-            color: #6c757d;
-            font-size: 0.8rem;
-            font-style: italic;
-        }
-        
-        .agreement-no-data {
-            color: #6c757d;
-            font-size: 1rem;
-        }
-        
-        .agreement-error {
-            color: #dc3545;
-            font-size: 0.8rem;
-        }
-        
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.5; }
-            100% { opacity: 1; }
-        }
+      :root{--color-bg-gradient-start:#667eea;--color-bg-gradient-end:#764ba2;--color-bg-app:#f5f7fa;--color-primary:#667eea;--color-primary-alt:#764ba2;--color-light:#f8f9fa;--color-border:#e1e5e9;--font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;}
+      *{box-sizing:border-box;margin:0;padding:0}
+      body{background:var(--color-bg-app);font-family:var(--font-family);min-height:100vh;}
+      .header{background:linear-gradient(135deg,var(--color-bg-gradient-start),var(--color-bg-gradient-end));color:#fff;padding:1rem 2rem;display:flex;justify-content:space-between;align-items:center;box-shadow:0 2px 10px rgba(0,0,0,.12)}
+      .header h1{font-size:1.2rem;margin:0;font-weight:600;letter-spacing:-.5px}
+      .nav-tabs{display:flex;gap:1rem;margin:1.2rem 2rem 0}
+      .nav-tab{padding:.55rem 1rem;background:#fff;border:0;border-radius:5px 5px 0 0;cursor:pointer;font-weight:500;font-size:.8rem;box-shadow:0 2px 4px rgba(0,0,0,.08)}
+      .nav-tab.active{background:var(--color-primary);color:#fff}
+      .container{max-width:1400px;margin:0 auto;padding:1.25rem 1.5rem}
+      body.preload *{transition:none!important;animation:none!important}
     </style>
+    <!-- Preload bundled CSS -->
+    <link rel="preload" href="{{ url_for('static', filename='css/admin.bundle.css') }}" as="style" onload="this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="{{ url_for('static', filename='css/admin.bundle.css') }}"></noscript>
+    <!-- Nuevo: estilos modulares adicionales -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_mod.css') }}">
 </head>
-<body>
+<body class="admin-view preload">
     <div class="header">
         <h1>🛠️ Panel de Administración</h1>
         <div class="user-info">
             <span id="admin-name">Admin</span>
-            <button class="btn btn-primary" onclick="goToAnnotation()" style="margin-right: 1rem;">
+            <button class="btn btn-primary" data-action="go-annotator" style="margin-right: 1rem;">
                 📝 Ir a Anotar
             </button>
-            <button class="btn btn-danger" onclick="logout()">Cerrar Sesión</button>
+            <button class="btn btn-danger" data-action="logout">Cerrar Sesión</button>
         </div>
     </div>
     
-    <div class="nav-tabs">
-        <button class="nav-tab active" onclick="showTab('overview')">Resumen</button>
-        <button class="nav-tab" onclick="showTab('assignments')">Asignaciones</button>
-        <button class="nav-tab" onclick="showTab('users')">Usuarios</button>
-        <button class="nav-tab" onclick="showTab('images')">Imágenes</button>
-        <button class="nav-tab" onclick="showTab('quality')">Control de Calidad</button>
+    <div class="nav-tabs" role="tablist">
+        <button class="nav-tab active" data-tab="overview" aria-selected="true">Resumen</button>
+        <button class="nav-tab" data-tab="assignments" aria-selected="false">Asignaciones</button>
+        <button class="nav-tab" data-tab="users" aria-selected="false">Usuarios</button>
+        <button class="nav-tab" data-tab="images" aria-selected="false">Imágenes</button>
+        <button class="nav-tab" data-tab="quality" aria-selected="false">Control de Calidad</button>
     </div>
     
     <div class="container">
-        <!-- Tab: Resumen -->
-        <div id="overview-tab" class="tab-content active">
+        <div id="overview-tab" class="tab-content active" aria-hidden="false">
             <h2>Estadísticas Generales</h2>
-            <div class="stats-grid" id="general-stats">
-                <!-- Stats cargadas dinámicamente -->
-            </div>
-            
-            <div class="section-header">
-                <h3>Actividad Reciente</h3>
-            </div>
-            <div id="recent-activity">
-                <!-- Actividad cargada dinámicamente -->
-            </div>
+            <div class="stats-grid" id="general-stats"></div>
+            <div class="section-header"><h3>Actividad Reciente</h3></div>
+            <div id="recent-activity"></div>
         </div>
-        
-        <!-- Tab: Asignaciones -->
-        <div id="assignments-tab" class="tab-content">
-            <div class="section-header">
-                <h2>Asignar Tareas</h2>
-            </div>
-            
-            <!-- Asignación Automática -->
-            <div class="assignment-section">
-                <h3>🎯 Asignación Automática</h3>
-                <div class="auto-assignment-form">
-                    <div class="form-group">
-                        <label for="auto-user-select">Usuario:</label>
-                        <select id="auto-user-select">
-                            <option value="">Seleccionar usuario...</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="auto-count">Número de imágenes:</label>
-                        <input type="number" id="auto-count" min="1" max="1000" value="10">
-                    </div>
-                    <div class="form-group">
-                        <label>
-                            <input type="radio" name="priority" value="unannotated" checked>
-                            Priorizar imágenes sin anotar
-                        </label>
-                        <label>
-                            <input type="radio" name="priority" value="annotated">
-                            Priorizar imágenes ya anotadas por admin
-                        </label>
-                    </div>
-                    <button class="btn btn-success" onclick="createAutoAssignments()">
-                        🚀 Asignar Automáticamente
-                    </button>
+        <div id="assignments-tab" class="tab-content" aria-hidden="true">
+            <div class="section-header"><h2>Asignar Tareas</h2></div>
+            <div class="assignment-card assignment-card--elevated" aria-label="Asignación Automática de Imágenes">
+                <div class="assignment-card__accent" aria-hidden="true"></div>
+                <div class="assignment-card__header"><h3>🎯 Asignación Automática</h3><p class="assignment-card__desc">Distribuye rápidamente imágenes a un usuario priorizando según su estado actual. Los conteos se actualizan al crear nuevas asignaciones.</p></div>
+                <form class="auto-assignment-form" onsubmit="return false;">
+                    <div class="form-group"><label for="auto-user-select">Usuario</label><select id="auto-user-select"><option value="">Seleccionar usuario...</option></select></div>
+                    <div class="form-group"><label for="auto-count">Nº Imágenes</label><input type="number" id="auto-count" min="1" max="1000" value="10"></div>
+                    <fieldset class="form-group priority-group" role="radiogroup" aria-label="Prioridad de selección">
+                        <label class="priority-option"><input type="radio" name="priority" value="unannotated" checked> <span>Priorizar sin anotar</span></label>
+                        <label class="priority-option"><input type="radio" name="priority" value="annotated"> <span>Priorizar anotadas admin</span></label>
+                    </fieldset>
+                    <div class="form-actions"><button class="btn btn-success btn-lg" data-action="assign-auto">🚀 Asignar</button></div>
+                </form>
+                <div class="assignment-stats-inline" aria-label="Resumen rápido de imágenes">
+                    <div class="a-stat" title="Imágenes totales"><span class="a-stat__label">Total</span><span id="a-total" class="a-stat__value">-</span></div>
+                    <div class="a-stat" title="Imágenes sin anotar"><span class="a-stat__label">Sin anotar</span><span id="a-unannotated" class="a-stat__value">-</span></div>
+                    <div class="a-stat" title="Progreso global"><span class="a-stat__label">Progreso</span><span id="a-progress" class="a-stat__value">-</span></div>
                 </div>
-                <div id="auto-assignment-result" style="margin-top: 1rem;"></div>
+                <p class="assignment-hint">Tip: Ajusta el número en función de la carga de trabajo y usa la prioridad para acelerar áreas específicas. Esta operación evita reasignar imágenes ya trabajadas.</p>
+                <div id="auto-assignment-result" class="assignment-result" aria-live="polite"></div>
             </div>
-            
-            <hr style="margin: 2rem 0;">
-            
-            <!-- Asignación Manual (existente) -->
-            <div class="assignment-section">
-                <h3>✋ Asignación Manual</h3>
-                <div class="assignment-form">
-                    <div>
-                        <h4>Seleccionar Usuarios</h4>
-                        <div class="user-list" id="assignment-users">
-                            <!-- Usuarios cargados dinámicamente -->
-                        </div>
-                    </div>
-                    <div>
-                        <h4>Seleccionar Imágenes (primeras 50)</h4>
-                        <div class="image-list" id="assignment-images">
-                            <!-- Imágenes cargadas dinámicamente -->
-                        </div>
-                    </div>
+        </div>
+        <div id="users-tab" class="tab-content" aria-hidden="true">
+            <div class="section-header"><h2>Gestión de Usuarios</h2><button class="btn btn-primary" data-action="open-create-user">+ Crear Usuario</button></div>
+            <div class="user-management-toolbar">
+                <div class="user-counters" role="group" aria-label="Resumen de usuarios">
+                    <span class="counter-pill">Total <strong id="user-count-total">0</strong></span>
+                    <span class="counter-pill">Anotadores <strong id="user-count-annotators">0</strong></span>
+                    <span class="counter-pill">Admins <strong id="user-count-admins">0</strong></span>
                 </div>
-                
-                <button class="btn btn-primary" onclick="createAssignments()">
-                    📋 Crear Asignaciones Manuales
-                </button>
-                
-                <div id="assignment-result" style="margin-top: 1rem;"></div>
-            </div>
-        </div>
-        
-        <!-- Tab: Usuarios -->
-        <div id="users-tab" class="tab-content">
-            <div class="section-header">
-                <h2>Gestión de Usuarios</h2>
-                <button class="btn btn-primary" onclick="showCreateUserModal()">
-                    + Crear Usuario
-                </button>
-            </div>
-            
-            <table class="table" id="users-table">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Usuario</th>
-                        <th>Rol</th>
-                        <th>Agreement c/ Admin</th>
-                        <th>Acciones</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <!-- Usuarios cargados dinámicamente -->
-                </tbody>
-            </table>
-        </div>
-        
-        <!-- Tab: Imágenes -->
-        <div id="images-tab" class="tab-content">
-            <div class="section-header">
-                <h2>Gestión de Imágenes</h2>
-                <button class="btn btn-primary" onclick="showCreateImageModal()">
-                    + Agregar Imagen
-                </button>
-            </div>
-            
-            <table class="table" id="images-table">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Ruta</th>
-                        <th>Texto OCR (Preview)</th>
-                        <th>Anotaciones</th>
-                        <th>Acciones</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <!-- Imágenes cargadas dinámicamente -->
-                </tbody>
-            </table>
-        </div>
-        
-        <!-- Tab: Control de Calidad -->
-        <div id="quality-tab" class="tab-content">
-            <div class="section-header">
-                <h2>🔍 Control de Calidad</h2>
-                <button class="btn btn-primary" onclick="adminPanel.loadQualityControl()">🔄 Actualizar</button>
-            </div>
-            
-            <div style="background: #e8f4f8; padding: 1rem; border-radius: 8px; margin-bottom: 2rem; border-left: 4px solid #17a2b8;">
-                <h4 style="margin: 0 0 0.5rem 0; color: #0c5460;">ℹ️ ¿Qué es el Control de Calidad?</h4>
-                <p style="margin: 0; color: #0c5460;">
-                    Esta vista muestra las imágenes donde las anotaciones del admin difieren de las anotaciones de los usuarios. 
-                    Permite revisar y consolidar las diferencias, adoptando la versión del usuario cuando sea más precisa.
-                </p>
-            </div>
-            
-            <div id="quality-control-list">
-                <!-- Datos de control de calidad cargados dinámicamente -->
-                <div style="text-align: center; padding: 3rem; color: #666;">
-                    <div style="font-size: 3rem; margin-bottom: 1rem;">⏳</div>
-                    <p>Cargando datos de control de calidad...</p>
+                <div class="user-filters" role="group" aria-label="Filtros de rol">
+                    <button type="button" class="filter-chip active" data-filter-role="all">Todos</button>
+                    <button type="button" class="filter-chip" data-filter-role="annotator">Anotadores</button>
+                    <button type="button" class="filter-chip" data-filter-role="admin">Admins</button>
                 </div>
+                <div class="user-search"><input id="user-search" type="text" placeholder="🔍 Buscar usuario..." aria-label="Buscar usuario"></div>
             </div>
+            <table class="table users-table-modern" id="users-table"><thead><tr><th>ID</th><th>Usuario</th><th>Rol</th><th>Agreement c/ Admin</th><th>Acciones</th></tr></thead><tbody></tbody></table>
+        </div>
+        <div id="images-tab" class="tab-content" aria-hidden="true">
+            <div class="section-header"><h2>Gestión de Imágenes</h2><button class="btn btn-primary" data-action="open-create-image">+ Agregar Imagen</button></div>
+            <table class="table" id="images-table"><thead><tr><th>ID</th><th>Ruta</th><th>Texto OCR (Preview)</th><th>Anotaciones</th><th>Acciones</th></tr></thead><tbody></tbody></table>
+        </div>
+        <div id="quality-tab" class="tab-content" aria-hidden="true">
+            <div class="section-header"><h2>🔍 Control de Calidad</h2><button class="btn btn-primary" data-action="quality-refresh">🔄 Actualizar</button></div>
+            <div style="background:#e8f4f8;padding:1rem;border-radius:8px;margin-bottom:2rem;border-left:4px solid #17a2b8;">
+                <h4 style="margin:0 0 .5rem;color:#0c5460;">ℹ️ ¿Qué es el Control de Calidad?</h4>
+                <p style="margin:0;color:#0c5460;">Esta vista muestra las imágenes donde las anotaciones del admin difieren de las anotaciones de los usuarios. Permite revisar y consolidar las diferencias.</p>
+            </div>
+            <div id="quality-control-list"><div style="text-align:center;padding:3rem;color:#666;"><div style="font-size:3rem;margin-bottom:1rem;">⏳</div><p>Cargando datos de control de calidad...</p></div></div>
         </div>
     </div>
-    
-    <!-- Modal para crear usuario -->
-    <div id="create-user-modal" class="modal">
+    <div id="create-user-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="create-user-title">
         <div class="modal-content">
-            <h3>Crear Nuevo Usuario</h3>
+            <h3 id="create-user-title">Crear Nuevo Usuario</h3>
             <form id="create-user-form">
-                <div class="form-group">
-                    <label for="new-username">Usuario:</label>
-                    <input type="text" id="new-username" required>
-                </div>
-                <div class="form-group">
-                    <label for="new-password">Contraseña:</label>
-                    <input type="password" id="new-password" required>
-                </div>
-                <div class="form-group">
-                    <label for="new-role">Rol:</label>
-                    <select id="new-role">
-                        <option value="annotator">Anotador</option>
-                        <option value="admin">Administrador</option>
-                    </select>
-                </div>
-                <div style="display: flex; gap: 1rem; justify-content: flex-end;">
-                    <button type="button" class="btn" onclick="closeModal('create-user-modal')">
-                        Cancelar
-                    </button>
-                    <button type="submit" class="btn btn-primary">
-                        Crear Usuario
-                    </button>
-                </div>
+                <div class="form-group"><label for="new-username">Usuario:</label><input type="text" id="new-username" required></div>
+                <div class="form-group"><label for="new-password">Contraseña:</label><input type="password" id="new-password" required></div>
+                <div class="form-group"><label for="new-role">Rol:</label><select id="new-role"><option value="annotator">Anotador</option><option value="admin">Administrador</option></select></div>
+                <div style="display:flex;gap:1rem;justify-content:flex-end;"><button type="button" class="btn" data-action="modal-close" data-target="#create-user-modal">Cancelar</button><button type="submit" class="btn btn-primary">Crear Usuario</button></div>
             </form>
         </div>
     </div>
-
-    <script src="/static/js/sqlite_admin.js"></script>
+    <script>window.addEventListener('load',()=>document.body.classList.remove('preload'));</script>
+    <script type="module" src="{{ url_for('static', filename='js/views/admin.js') }}"></script>
 </body>
 </html>
