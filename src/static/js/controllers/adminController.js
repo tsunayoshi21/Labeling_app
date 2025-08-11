@@ -1,6 +1,6 @@
 // AdminController - primera fase de migración modular del panel admin
 // Objetivo: ir sacando lógica de carga de datos y logout del script legacy enorme.
-// Incremental: stats generales, actividad reciente y (fase 2) gestión usuarios / imágenes / asignaciones / control calidad.
+// Incremental: stats generales, actividad reciente y (fase 2) gestión usuarios / asignaciones / control calidad.
 
 import { adminService } from '../services/adminService.js';
 import { authService } from '../services/authService.js';
@@ -13,7 +13,7 @@ export class AdminController {
     this.activity = [];
     this.agreement = null;
     this.users = [];
-    this.images = [];
+    // Eliminado: this.images (pestaña Imágenes removida)
     this.quality = [];
   }
 
@@ -27,14 +27,14 @@ export class AdminController {
     // Fase 2: cargar modulos extra de forma diferida para no bloquear primer paint
     setTimeout(()=>{
       this.safeLoadUsers();
-      this.safeLoadImages();
+      // Eliminado: this.safeLoadImages();
       this.safeLoadQualityControl();
     }, 0);
   }
 
   // Helpers seguros para evitar errores si endpoints no están listos
   async safeLoadUsers(){ try { await this.loadUsers(); } catch(e){ console.warn('Users load (mod) fallo', e);} }
-  async safeLoadImages(){ try { await this.loadImages(); } catch(e){ console.warn('Images load (mod) fallo', e);} }
+  // Eliminado: safeLoadImages
   async safeLoadQualityControl(){ try { await this.loadQualityControl(); } catch(e){ console.warn('Quality load (mod) fallo', e);} }
 
   // ============== STATS & ACTIVITY ==============
@@ -108,23 +108,8 @@ export class AdminController {
     this.ui.toast?.('Anotación eliminada');
   }
 
-  // ============== IMAGES ==============
-  async loadImages(){
-    const data = await adminService.listImages();
-    this.images = data.images || [];
-    this.ui.updateImages?.(this.images);
-    this.ui.updateAssignmentImages?.(this.images);
-  }
-
-  async createImage(payload){
-    await adminService.createImage(payload);
-    await this.loadImages();
-    this.ui.toast?.('Imagen creada');
-  }
-
-  async imageAnnotations(imageId){
-    return adminService.imageAnnotations(imageId);
-  }
+  // ============== IMAGES (eliminado) ==============
+  // loadImages, createImage e imageAnnotations fueron eliminados junto con la pestaña Imágenes.
 
   // ============== ASSIGNMENTS ==============
   async createAssignments({ user_ids, image_ids }){
@@ -294,23 +279,7 @@ export const defaultAdminUI = {
       if (prev && autoSelect.querySelector(`option[value="${prev}"]`)) autoSelect.value = prev; // mantener selección si existe
     }
   },
-  updateImages(images){
-    const tbody = document.querySelector('#images-table tbody');
-    if (!tbody) return;
-    const subset = images.slice(0,100);
-    tbody.innerHTML = subset.map(img=>`<tr data-image-id="${img.id}">
-      <td>${img.id}<\/td>
-      <td title="${img.image_path}">${img.image_path.length>30?img.image_path.slice(0,30)+'...':img.image_path}<\/td>
-      <td title="${img.initial_ocr_text||''}">${(img.initial_ocr_text||'').length>50?(img.initial_ocr_text||'').slice(0,50)+'...':(img.initial_ocr_text||'')}<\/td>
-      <td>-<\/td>
-      <td><button class="btn btn-primary btn-sm" data-action="image-annotations" data-image="${img.id}">Ver Anotaciones<\/button><\/td>
-    <\/tr>`).join('');
-  },
-  updateAssignmentImages(images){
-    const container = document.getElementById('assignment-images');
-    if (!container) return;
-    container.innerHTML = images.slice(0,50).map(img=>`<div class="checkbox-item"><input type="checkbox" id="image-${img.id}" value="${img.id}"><label for="image-${img.id}" title="${img.image_path}">${img.image_path.length>40?img.image_path.slice(0,40)+'...':img.image_path}<\/label><\/div>`).join('');
-  },
+  // Eliminados: updateImages, updateAssignmentImages (pestaña Imágenes removida)
   updateQualityControl(items){
     const list = document.getElementById('quality-control-list');
     if (!list) return;

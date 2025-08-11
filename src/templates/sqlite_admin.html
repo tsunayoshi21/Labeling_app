@@ -4,18 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Panel de Administración</title>
+    <link rel="icon" href="{{ url_for('static', filename='icons/ocr-icon-square-gradient.svg') }}" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="{{ url_for('static', filename='icons/ocr-icon-dark.svg') }}" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+    <link rel="icon" href="{{ url_for('static', filename='icons/ocr-icon-square-gradient.svg') }}" type="image/svg+xml">
     <!-- Critical CSS inline -->
     <style>
-      :root{--color-bg-gradient-start:#667eea;--color-bg-gradient-end:#764ba2;--color-bg-app:#f5f7fa;--color-primary:#667eea;--color-primary-alt:#764ba2;--color-light:#f8f9fa;--color-border:#e1e5e9;--font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;}
+      :root{--color-bg-gradient-start:#667eea;--color-bg-gradient-end:#764ba2;--color-bg-app:#f5f7fa;--color-primary:#667eea;--color-primary-alt:#764ba2;--color-light:#f8f9fa;--color-border:#e1e5e9;--font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;--footer-height:64px}
       *{box-sizing:border-box;margin:0;padding:0}
-      body{background:var(--color-bg-app);font-family:var(--font-family);min-height:100vh;}
+      body{background:var(--color-bg-app);font-family:var(--font-family);min-height:100vh;display:flex;flex-direction:column;padding-bottom:var(--footer-height)}
       .header{background:linear-gradient(135deg,var(--color-bg-gradient-start),var(--color-bg-gradient-end));color:#fff;padding:1rem 2rem;display:flex;justify-content:space-between;align-items:center;box-shadow:0 2px 10px rgba(0,0,0,.12)}
       .header h1{font-size:1.2rem;margin:0;font-weight:600;letter-spacing:-.5px}
       .nav-tabs{display:flex;gap:1rem;margin:1.2rem 2rem 0}
       .nav-tab{padding:.55rem 1rem;background:#fff;border:0;border-radius:5px 5px 0 0;cursor:pointer;font-weight:500;font-size:.8rem;box-shadow:0 2px 4px rgba(0,0,0,.08)}
       .nav-tab.active{background:var(--color-primary);color:#fff}
-      .container{max-width:1400px;margin:0 auto;padding:1.25rem 1.5rem}
+      .container{max-width:1400px;margin:0 auto;padding:1.25rem 1.5rem;flex:1}
       body.preload *{transition:none!important;animation:none!important}
+      /* Footer */
+      .app-footer{position:fixed;left:0;right:0;bottom:0;min-height:var(--footer-height);padding:.75rem 1rem;background:linear-gradient(135deg,#4f6eea,#5a67d8);color:#fff;font-size:.85rem;text-align:center;box-shadow:0 -6px 14px rgba(0,0,0,.08);z-index:1000}
     </style>
     <!-- Preload bundled CSS -->
     <link rel="preload" href="{{ url_for('static', filename='css/admin.bundle.css') }}" as="style" onload="this.rel='stylesheet'">
@@ -39,7 +44,6 @@
         <button class="nav-tab active" data-tab="overview" aria-selected="true">Resumen</button>
         <button class="nav-tab" data-tab="assignments" aria-selected="false">Asignaciones</button>
         <button class="nav-tab" data-tab="users" aria-selected="false">Usuarios</button>
-        <button class="nav-tab" data-tab="images" aria-selected="false">Imágenes</button>
         <button class="nav-tab" data-tab="quality" aria-selected="false">Control de Calidad</button>
     </div>
     
@@ -90,10 +94,6 @@
             </div>
             <table class="table users-table-modern" id="users-table"><thead><tr><th>ID</th><th>Usuario</th><th>Rol</th><th>Agreement c/ Admin</th><th>Acciones</th></tr></thead><tbody></tbody></table>
         </div>
-        <div id="images-tab" class="tab-content" aria-hidden="true">
-            <div class="section-header"><h2>Gestión de Imágenes</h2><button class="btn btn-primary" data-action="open-create-image">+ Agregar Imagen</button></div>
-            <table class="table" id="images-table"><thead><tr><th>ID</th><th>Ruta</th><th>Texto OCR (Preview)</th><th>Anotaciones</th><th>Acciones</th></tr></thead><tbody></tbody></table>
-        </div>
         <div id="quality-tab" class="tab-content" aria-hidden="true">
             <div class="section-header"><h2>🔍 Control de Calidad</h2><button class="btn btn-primary" data-action="quality-refresh">🔄 Actualizar</button></div>
             <div style="background:#e8f4f8;padding:1rem;border-radius:8px;margin-bottom:2rem;border-left:4px solid #17a2b8;">
@@ -103,17 +103,7 @@
             <div id="quality-control-list"><div style="text-align:center;padding:3rem;color:#666;"><div style="font-size:3rem;margin-bottom:1rem;">⏳</div><p>Cargando datos de control de calidad...</p></div></div>
         </div>
     </div>
-    <div id="create-user-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="create-user-title">
-        <div class="modal-content">
-            <h3 id="create-user-title">Crear Nuevo Usuario</h3>
-            <form id="create-user-form">
-                <div class="form-group"><label for="new-username">Usuario:</label><input type="text" id="new-username" required></div>
-                <div class="form-group"><label for="new-password">Contraseña:</label><input type="password" id="new-password" required></div>
-                <div class="form-group"><label for="new-role">Rol:</label><select id="new-role"><option value="annotator">Anotador</option><option value="admin">Administrador</option></select></div>
-                <div style="display:flex;gap:1rem;justify-content:flex-end;"><button type="button" class="btn" data-action="modal-close" data-target="#create-user-modal">Cancelar</button><button type="submit" class="btn btn-primary">Crear Usuario</button></div>
-            </form>
-        </div>
-    </div>
+    <footer class="app-footer" role="contentinfo">© 2025 · Panel de Administración · Corrector de Transcripciones OCR · Cristobal Vasquez</footer>
     <script>window.addEventListener('load',()=>document.body.classList.remove('preload'));</script>
     <script type="module" src="{{ url_for('static', filename='js/views/admin.js') }}"></script>
 </body>

@@ -4,15 +4,27 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Corrector de Transcripciones OCR - Colaborativo</title>
+    <link rel="icon" href="{{ url_for('static', filename='icons/ocr-icon-square-gradient.svg') }}" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="{{ url_for('static', filename='icons/ocr-icon-dark.svg') }}" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+    <link rel="icon" href="{{ url_for('static', filename='icons/ocr-icon-square-gradient.svg') }}" type="image/svg+xml">
     <!-- Critical (minimal) CSS inline to avoid FOUC -->
     <style>
-      :root{--font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;--color-bg-gradient-start:#667eea;--color-bg-gradient-end:#764ba2;--color-primary:#667eea;--color-success:#28a745;--color-light:#f8f9fa;--color-text:#333;}
+      :root{--font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;--color-bg-gradient-start:#667eea;--color-bg-gradient-end:#764ba2;--color-primary:#667eea;--color-success:#28a745;--color-light:#f8f9fa;--color-text:#333;--footer-height:64px;}
       *{box-sizing:border-box;margin:0;padding:0}
       body{font-family:var(--font-family);background:linear-gradient(135deg,var(--color-bg-gradient-start) 0%,var(--color-bg-gradient-end) 100%);min-height:100vh;padding:15px;}
       body.preload *{transition:none!important;animation:none!important}
-      .container{background:#fff;border-radius:20px;box-shadow:0 10px 30px rgba(0,0,0,.12);padding:20px;max-width:1200px;margin:0 auto;min-height:calc(100vh - 30px);display:flex;flex-direction:column}
+      .container{background:#fff;border-radius:20px;box-shadow:0 10px 30px rgba(0,0,0,.12);padding:20px;max-width:1200px;margin:0 auto 25px!important;min-height:calc(100vh - 30px)!important;display:flex;flex-direction:column}
       .header{display:flex;justify-content:space-between;align-items:center;background:linear-gradient(135deg,var(--color-bg-gradient-start),var(--color-bg-gradient-end));color:#fff;padding:1rem 1.2rem;border-radius:14px;margin-bottom:15px}
       .header h1{font-size:1.2rem;font-weight:600;margin:0;letter-spacing:-.5px}
+      /* Ensure space for fixed footer */
+      body{padding-bottom:15px!important;}
+      /* Footer interno profesional, ocupa todo el borde inferior */
+      .app-footer{margin:0 -20px -20px!important;margin-top:auto!important;border-radius:0 0 20px 20px!important;padding:.9rem 24px!important;background:linear-gradient(135deg,#5567de,#6a73e0)!important;display:flex;align-items:center;justify-content:center;gap:.75rem;font-size:.8rem;font-weight:500;letter-spacing:.25px;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.15),0 -1px 0 rgba(0,0,0,.04);} 
+      .app-footer span.footer-secondary{display:none!important;} /* remove shortcuts */
+      /* Espacio adicional al final del contenido principal */
+      .main-content{padding-bottom:20px;}
+      /* Ajustar acciones para que no queden pegadas */
+      .actions{margin-bottom:32px!important;} /* keep spacing from footer */
     </style>
     <!-- Preload bundled CSS -->
     <link rel="preload" href="{{ url_for('static', filename='css/annotator.bundle.css') }}" as="style" onload="this.rel='stylesheet'">
@@ -172,6 +184,9 @@
 
             <div id="errorDiv" class="error hidden"></div>
         </div>
+        <footer class="app-footer" role="contentinfo">
+            <span>© 2025 · Corrector de Transcripciones OCR · Cristobal Vasquez</span>
+        </footer>
     </div>
     <script>window.addEventListener('load',()=>document.body.classList.remove('preload'));</script>
     <!-- New ES Module entrypoint -->

@@ -66,16 +66,7 @@ window.ModAPI = { ...(window.ModAPI||{}), JWT, adminService, authService };
           if(!await Modal.confirm({ message:`Asignar automáticamente ${count} imágenes?`, acceptLabel:'Asignar'})) return;
           await window.adminController.createAutoAssignments({ user_id, count, priority_unannotated });
           document.getElementById('auto-user-select').value=''; document.getElementById('auto-count').value='10'; break; }
-        case 'open-create-image': {
-          // Placeholder: abrir modal creación imagen (pendiente migrar si existe en legacy)
-          const formHtml = `<form id="create-image-form" style="display:flex;flex-direction:column;gap:.75rem;">\
-            <label style='display:flex;flex-direction:column;font-size:.85rem;'>Ruta de la imagen<input required name='image_path' style='margin-top:.25rem;padding:.4rem;border:1px solid #ccc;border-radius:4px;'></label>\
-            <label style='display:flex;flex-direction:column;font-size:.85rem;'>Texto OCR Inicial (opcional)<textarea name='initial_ocr_text' rows='4' style='margin-top:.25rem;padding:.4rem;border:1px solid #ccc;border-radius:4px;'></textarea></label>\
-          </form>`;
-          Modal.open({ id:'create-image-modal', title:'+ Agregar Imagen', content:formHtml, actions:[
-            { label:'Cancelar', variant:'secondary', onClick:({close})=>close() },
-            { label:'Crear', variant:'primary', onClick: async ({close})=>{ const f=document.getElementById('create-image-form'); if(!f.reportValidity()) return; const fd=new FormData(f); await window.adminController.createImage(Object.fromEntries(fd.entries())); close(); } }
-          ], width:'520px'}); break; }
+        // Eliminado: open-create-image (pestaña Imágenes removida)
         default: break;
       }
     } catch(err){ console.error(err); ui.showError?.('Acción falló'); }
@@ -108,8 +99,7 @@ window.ModAPI = { ...(window.ModAPI||{}), JWT, adminService, authService };
           break; }
         case 'user-transfer': {
           const id = parseInt(btn.dataset.user); const fromUser = window.adminController.users.find(u=>u.id===id); openTransferAnnotationsModal({ fromUser, users: window.adminController.users, onTransfer: async (opts)=>{ await window.adminController.transferAnnotations(id, opts); } }); break; }
-        case 'image-annotations': {
-          const id = parseInt(btn.dataset.image); const data = await adminService.imageAnnotations(id); ui.toast?.(`Imagen ${id} anotaciones: ${data.annotations?.length||0}`); break; }
+        // Eliminadas: image-annotations, qc-view-image y qc-compare se mantienen para calidad.
         case 'qc-consolidate': {
           const ua = parseInt(btn.dataset.userAnnotation); const aa = parseInt(btn.dataset.adminAnnotation); if(!await Modal.confirm({message:'¿Consolidar anotación usando texto de usuario?', acceptLabel:'Consolidar'})) return; await window.adminController.consolidateQuality(ua, aa); break; }
         case 'qc-view-image': {

@@ -22,13 +22,6 @@ export const adminService = {
   },
   agreementStats() { return http(`${API_BASE}/users/agreement-stats`); },
 
-  // images
-  listImages() { return http(`${API_BASE}/images`); },
-  imageAnnotations(imageId) { return http(`${API_BASE}/images/${imageId}/annotations`); },
-  createImage({ image_path, initial_ocr_text }) {
-    return http(`${API_BASE}/images`, { method: 'POST', body: JSON.stringify({ image_path, initial_ocr_text }) });
-  },
-
   // assignments
   createAssignments({ user_ids, image_ids }) {
     return http(`${API_BASE}/assignments`, { method: 'POST', body: JSON.stringify({ user_ids, image_ids }) });

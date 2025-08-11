@@ -130,7 +130,7 @@ export class AnnotatorController {
   _inHistory() { return this.historyIndex >= 0; }
 
   startEdit() {
-    if (this._inHistory()) { this.ui.showError('No puedes editar desde el historial'); return; }
+    // Permitir edición también en historial (undo/corrección)
     if (!this.currentTask) return;
     if (this.editMode) return; // ya activo
     const text = this.currentTask.corrected_text || this.currentTask.initial_ocr_text || '';
@@ -145,10 +145,10 @@ export class AnnotatorController {
   }
 
   async saveEdit() {
-    if (this._inHistory()) { this.ui.showError('No puedes editar desde el historial'); return; }
     if (!this.currentAnnotationId) return;
     const newText = this.ui.getEditedText?.();
     if (!newText) { this.ui.showError('Texto vacío'); return; }
+    const fromHistory = this._inHistory();
     try {
       this.ui.disableActionButtons?.(true);
       await taskService.submitAction(this.currentAnnotationId, 'corrected', newText);
@@ -160,7 +160,7 @@ export class AnnotatorController {
       this.editMode = false;
       this.ui.exitEditMode?.();
       this.ui.flashSuccess?.('✓ Corrección guardada');
-      await this.afterActionRefresh();
+      await this.afterActionRefresh({ fromHistory, annotationId: this.currentAnnotationId });
     } catch (e) {
       console.error(e);
       this.ui.showError('Error guardando');
@@ -170,8 +170,8 @@ export class AnnotatorController {
   }
 
   async approveCurrent() {
-    if (this._inHistory()) { this.ui.showError('No puedes aprobar en historial'); return; }
     if (!this.currentAnnotationId) return;
+    const fromHistory = this._inHistory();
     try {
       this.ui.disableActionButtons?.(true);
       await taskService.submitAction(this.currentAnnotationId, 'approved');
@@ -180,7 +180,7 @@ export class AnnotatorController {
         this.ui.updateTaskStatus?.(this.currentTask);
       }
       this.ui.flashSuccess?.('✓ Imagen aprobada');
-      await this.afterActionRefresh();
+      await this.afterActionRefresh({ fromHistory, annotationId: this.currentAnnotationId });
     } catch (e) {
       console.error(e);
       this.ui.showError('Error aprobando');
@@ -190,8 +190,8 @@ export class AnnotatorController {
   }
 
   async discardCurrent() {
-    if (this._inHistory()) { this.ui.showError('No puedes descartar en historial'); return; }
     if (!this.currentAnnotationId) return;
+    const fromHistory = this._inHistory();
     try {
       this.ui.disableActionButtons?.(true);
       await taskService.submitAction(this.currentAnnotationId, 'discarded');
@@ -200,7 +200,7 @@ export class AnnotatorController {
         this.ui.updateTaskStatus?.(this.currentTask);
       }
       this.ui.flashSuccess?.('🗑️ Imagen descartada');
-      await this.afterActionRefresh();
+      await this.afterActionRefresh({ fromHistory, annotationId: this.currentAnnotationId });
     } catch (e) {
       console.error(e);
       this.ui.showError('Error descartando');
@@ -209,8 +209,20 @@ export class AnnotatorController {
     }
   }
 
-  async afterActionRefresh() {
-    // Secuencia: cargar siguiente tarea y luego refrescar vistas auxiliares
+  async afterActionRefresh(ctx = {}) {
+    // NUEVO: si la acción viene del historial, regresar al flujo de tarea actual
+    if (ctx.fromHistory) {
+      this.historyIndex = -1; // asegurar estado navegación principal
+      await this.loadCurrentTask();
+      await Promise.all([
+        this.refreshStats(),
+        this.loadHistory(), // incluye cambios hechos en historial
+        this.loadPending(),
+      ]);
+      this._updateNavUI();
+      return;
+    }
+    // Flujo original para tarea actual
     await this.loadCurrentTask();
     await Promise.all([
       this.refreshStats(),
