@@ -9,6 +9,7 @@ import { openTransferAnnotationsModal } from '../components/admin/transferAnnota
 import { openComparisonModal } from '../components/admin/comparisonModal.js';
 import { Modal } from '../components/admin/modal.js';
 import { TabController } from '../components/admin/tabs.js';
+import { ensureCreateUserModal } from '../components/admin/createUserModal.js';
 
 window.ModAPI = { ...(window.ModAPI||{}), JWT, adminService, authService };
 
@@ -44,8 +45,6 @@ window.ModAPI = { ...(window.ModAPI||{}), JWT, adminService, authService };
   const mo = new MutationObserver(updateAria);
   document.querySelectorAll('.nav-tab').forEach(el=>mo.observe(el,{attributes:true,attributeFilter:['class']}));
 
-  // Eliminado binding directo de logout; ahora se maneja via data-action="logout"
-
   // Delegated top bar actions
   document.body.addEventListener('click', async (e)=>{
     const el = e.target.closest('[data-action]'); if(!el) return;
@@ -54,7 +53,10 @@ window.ModAPI = { ...(window.ModAPI||{}), JWT, adminService, authService };
       switch(act) {
         case 'logout': e.preventDefault(); await window.adminController.logout(); break;
         case 'go-annotator': window.location.href='/'; break;
-        case 'open-create-user': document.getElementById('create-user-modal').style.display='block'; break;
+        case 'open-create-user': {
+          const modal = ensureCreateUserModal(ui);
+          modal.style.display='block';
+          break; }
         case 'modal-close': { const sel = el.dataset.target; const target = sel?document.querySelector(sel):el.closest('.modal'); if(target) target.style.display='none'; break; }
         case 'quality-refresh': await window.adminController.loadQualityControl(); break;
         case 'assign-auto': {
@@ -66,7 +68,6 @@ window.ModAPI = { ...(window.ModAPI||{}), JWT, adminService, authService };
           if(!await Modal.confirm({ message:`Asignar automáticamente ${count} imágenes?`, acceptLabel:'Asignar'})) return;
           await window.adminController.createAutoAssignments({ user_id, count, priority_unannotated });
           document.getElementById('auto-user-select').value=''; document.getElementById('auto-count').value='10'; break; }
-        // Eliminado: open-create-image (pestaña Imágenes removida)
         default: break;
       }
     } catch(err){ console.error(err); ui.showError?.('Acción falló'); }
@@ -99,7 +100,6 @@ window.ModAPI = { ...(window.ModAPI||{}), JWT, adminService, authService };
           break; }
         case 'user-transfer': {
           const id = parseInt(btn.dataset.user); const fromUser = window.adminController.users.find(u=>u.id===id); openTransferAnnotationsModal({ fromUser, users: window.adminController.users, onTransfer: async (opts)=>{ await window.adminController.transferAnnotations(id, opts); } }); break; }
-        // Eliminadas: image-annotations, qc-view-image y qc-compare se mantienen para calidad.
         case 'qc-consolidate': {
           const ua = parseInt(btn.dataset.userAnnotation); const aa = parseInt(btn.dataset.adminAnnotation); if(!await Modal.confirm({message:'¿Consolidar anotación usando texto de usuario?', acceptLabel:'Consolidar'})) return; await window.adminController.consolidateQuality(ua, aa); break; }
         case 'qc-view-image': {
@@ -114,20 +114,20 @@ window.ModAPI = { ...(window.ModAPI||{}), JWT, adminService, authService };
     } catch(err){ console.error(err); ui.showError?.('Acción falló'); }
   });
 
-  // Formularios creación usuario / asignaciones (provisional extracción)
-  const createUserForm = document.getElementById('create-user-form');
-  if (createUserForm && !createUserForm.dataset.modBound){
-    createUserForm.addEventListener('submit', async ev => {
+  // Formularios creación usuario / asignaciones (modal puede ya existir en HTML)
+  const existingForm = document.getElementById('create-user-form');
+  if (existingForm && !existingForm.dataset.modBound){
+    existingForm.addEventListener('submit', async ev => {
       ev.preventDefault();
       const username = document.getElementById('new-username').value.trim();
       const password = document.getElementById('new-password').value.trim();
       const role = document.getElementById('new-role').value;
       if(!username||!password) return ui.showError?.('Campos requeridos');
       await window.adminController.createUser({ username, password, role });
-      document.getElementById('create-user-modal').style.display='none';
-      createUserForm.reset();
+      const modal = document.getElementById('create-user-modal'); if(modal) modal.style.display='none';
+      existingForm.reset();
     });
-    createUserForm.dataset.modBound='1';
+    existingForm.dataset.modBound='1';
   }
 
   // User search filter & counters
