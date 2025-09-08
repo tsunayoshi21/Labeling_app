@@ -804,6 +804,9 @@ class DatabaseService:
             transferred_count = 0
             skipped_count = 0
             
+            # Destino es admin (por rol o por ID 1)
+            is_to_admin = (to_user.role == 'admin') or (to_user_id == 1)
+
             for annotation in annotations_to_transfer:
                 # Verificar si el usuario destino ya tiene esta imagen asignada
                 existing = session.query(Annotation).filter_by(
@@ -812,6 +815,18 @@ class DatabaseService:
                 ).first()
                 
                 if existing:
+                    # Caso especial: si el destino es admin y su anotación está pendiente,
+                    # y la anotación del origen NO está pendiente, consolidamos:
+                    if is_to_admin and existing.status == 'pending' and annotation.status != 'pending':
+                        # Determinar texto a aplicar; si fue "approved" sin texto, usar OCR inicial
+                        existing.corrected_text = annotation.corrected_text
+                        existing.status = annotation.status
+                        existing.updated_at = datetime.now(timezone.utc)
+                        transferred_count += 1
+                        # No reasignamos ni borramos la anotación de origen; se considera consolidada
+                        continue
+
+                    # En cualquier otro caso, no podemos transferir porque ya existe en destino
                     skipped_count += 1
                     continue
                 

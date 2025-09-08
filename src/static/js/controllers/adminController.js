@@ -241,12 +241,17 @@ export const defaultAdminUI = {
     const tbody = document.querySelector('#users-table tbody');
     if (!tbody) return;
     tbody.innerHTML = users.map(u => {
-      const agreementCell = (agreementStats && agreementStats[u.id]) ? `${agreementStats[u.id].agreement_percentage}%` : (u.role==='admin' ? 'N/A' : '<span style="font-size:.7rem;color:#777;">...<\/span>');
+      const aStats = agreementStats && agreementStats[u.id];
+      const agreementPct = aStats ? aStats.agreement_percentage : null;
+      const agreementCellText = aStats ? `${agreementPct}%` : (u.role==='admin' ? 'N/A' : '<span style="font-size:.7rem;color:#777;">...<\/span>');
+      const agreementTitle = aStats
+        ? `Agreement: ${agreementPct}% (${aStats.agreements}/${aStats.total_comparisons})`
+        : (u.role==='admin' ? 'Usuario admin (no aplica agreement)' : 'Calculando agreement...');
       return `<tr data-user-id="${u.id}">
         <td>${u.id}<\/td>
         <td>${u.username}<\/td>
         <td><span class="status-badge ${u.role==='admin'?'status-approved':'status-pending'}">${u.role}<\/span><\/td>
-        <td class="agreement-cell" data-agreement-user="${u.id}">${agreementCell}<\/td>
+        <td class="agreement-cell" data-agreement-user="${u.id}" title="${agreementTitle}" aria-label="${agreementTitle}">${agreementCellText}<\/td>
         <td>
           <div class="action-buttons">
             <button class="btn btn-primary btn-sm" data-action="user-stats" data-user="${u.id}">📊 Stats<\/button>
@@ -263,7 +268,13 @@ export const defaultAdminUI = {
   updateUsersAgreement(agreementStats){
     Object.entries(agreementStats||{}).forEach(([id, st])=>{
       const cell = document.querySelector(`[data-agreement-user="${id}"]`);
-      if (cell) cell.textContent = `${st.agreement_percentage}%`;
+      if (cell) {
+        cell.textContent = `${st.agreement_percentage}%`;
+        const t = `Agreement: ${st.agreement_percentage}% (${st.agreements}/${st.total_comparisons})`;
+        cell.title = t;
+        cell.setAttribute('aria-label', t);
+        cell.removeAttribute('data-loading-agreement');
+      }
     });
   },
   updateAssignmentUsers(users){
@@ -294,7 +305,7 @@ export const defaultAdminUI = {
       <div style="display:grid;grid-template-columns:1fr 2fr 1fr;gap:1rem;align-items:start;">
         <div><h4>📷 Img ${it.image_id}<\/h4><p style=\"font-size:.75rem;color:#555;\">${it.image_path.slice(-50)}<\/p><button class=\"btn btn-secondary btn-sm\" data-action=\"qc-view-image\" data-path=\"${encodeURIComponent(it.image_path)}\" data-ocr=\"${encodeURIComponent(it.initial_ocr_text||'')}\">👁️ Ver Imagen<\/button></div>
         <div style=\"display:grid;grid-template-columns:1fr 1fr;gap:.75rem;\">
-          <div><h5 style=\"margin:.25rem 0;color:#28a745;\">👤 Usuario<\/h5><div style=\"background:#f8f9fa;padding:.5rem;border-left:4px solid #28a745;font-family:monospace;max-height:120px;overflow:auto;\">${it.user_annotation_text||'N/A'}<\/div><small class=\"status-badge status-${it.user_status}\">${it.user_status}<\/small></div>
+          <div><h5 style=\"margin:.25rem 0;color:#28a745;\">👤 ${it.username}<\/h5><div style=\"background:#f8f9fa;padding:.5rem;border-left:4px solid #28a745;font-family:monospace;max-height:120px;overflow:auto;\">${it.user_annotation_text||'N/A'}<\/div><small class=\"status-badge status-${it.user_status}\">${it.user_status}<\/small></div>
           <div><h5 style=\"margin:.25rem 0;color:#dc3545;\">👨‍💼 Admin<\/h5><div style=\"background:#f8f9fa;padding:.5rem;border-left:4px solid #dc3545;font-family:monospace;max-height:120px;overflow:auto;\">${it.admin_annotation_text||'N/A'}<\/div><small class=\"status-badge status-${it.admin_status}\">${it.admin_status}<\/small></div>
         </div>
         <div style=\"text-align:center;display:flex;flex-direction:column;gap:.5rem;\">

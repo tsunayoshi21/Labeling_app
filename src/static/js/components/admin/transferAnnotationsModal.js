@@ -1,7 +1,7 @@
 import { Modal } from './modal.js';
 
 export function openTransferAnnotationsModal({ fromUser, users = [], onTransfer }) {
-  const options = users.filter(u=>u.id!==fromUser.id && u.role==='annotator').map(u=>`<option value="${u.id}">${u.username} (${u.total_assigned} asignadas)</option>`).join('') || '<option value="">Sin destinos</option>';
+  const options = users.filter(u=>u.id!==fromUser.id).map(u=>`<option value="${u.id}">${u.username} (${u.total_assigned} asignadas)</option>`).join('') || '<option value="">Sin destinos</option>';
   const content = `
     <p style="margin:.25rem 0 1rem;">Transferir anotaciones de <strong>${fromUser.username}</strong> a:</p>
     <div class="form-group" style="margin-bottom:1rem;">
