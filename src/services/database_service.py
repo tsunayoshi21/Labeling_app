@@ -224,6 +224,36 @@ class DatabaseService:
         finally:
             session.close()
     
+    def admin_update_annotation(self, annotation_id: int, status: str, corrected_text: str = None) -> bool:
+        """Actualiza una anotación como admin (sin restringir por usuario)."""
+        session = self.get_session()
+        try:
+            ann = session.query(Annotation).filter(Annotation.id == annotation_id).one_or_none()
+            if not ann:
+                return False
+            # Si se aprueba sin texto corregido, usar el texto original de la imagen
+            if status == 'approved' and not corrected_text:
+                image = session.query(Image).filter_by(id=ann.image_id).first()
+                if image:
+                    corrected_text = image.initial_ocr_text
+
+            # Usar método de dominio si existe, para mantener consistencia
+            if hasattr(ann, 'update_status') and callable(getattr(ann, 'update_status')):
+                ann.update_status(status, corrected_text)
+            else:
+                ann.status = status
+                if corrected_text is not None:
+                    ann.corrected_text = corrected_text
+                ann.updated_at = datetime.now(timezone.utc)
+            session.commit()
+            return True
+        except Exception:
+            session.rollback()
+            logger.exception("Error en admin_update_annotation")
+            return False
+        finally:
+            session.close()
+    
     def get_annotation_by_id(self, annotation_id: int, user_id: int = None) -> Optional[Annotation]:
         """Obtiene una anotación por ID, opcionalmente filtrada por usuario"""
         session = self.get_session()
@@ -857,12 +887,16 @@ class DatabaseService:
             session.close()
     
     # Métodos para Control de Calidad
-    def get_quality_control_annotations(self) -> List[dict]:
-        """Obtiene anotaciones para control de calidad: mismo image_id anotado por admin y otro usuario con respuestas distintas"""
+    def get_quality_control_annotations(self, user_ids: List[int] = None, usernames: List[str] = None) -> List[dict]:
+        """Obtiene anotaciones para control de calidad: mismo image_id anotado por admin y otro usuario con respuestas distintas.
+        Filtros opcionales:
+          - user_ids: lista de IDs de usuario a incluir
+          - usernames: lista de usernames a incluir
+        """
         session = self.get_session()
         try:
             from sqlalchemy import and_, func, or_
-            
+
             # Primero, encontrar imágenes que tienen anotaciones tanto del admin como de otros usuarios
             admin_user = session.query(User).filter_by(role='admin').first()
             if not admin_user:
@@ -883,10 +917,10 @@ class DatabaseService:
                 )
             ).subquery()
 
-            # Consulta principal: buscar anotaciones de usuarios (no admin, no pending) 
+            # Consulta principal: buscar anotaciones de usuarios (no admin, no pending)
             # que tengan una anotación correspondiente del admin en la misma imagen
             # y que el texto corregido sea diferente o uno de los dos sea NULL
-            quality_data = session.query(
+            query = session.query(
                 Annotation,
                 Image,
                 User,
@@ -916,7 +950,21 @@ class DatabaseService:
                         Annotation.corrected_text != admin_annotations.c.admin_text
                     )
                 )
-            ).order_by(Annotation.updated_at.desc()).all()
+            )
+
+            # Aplicar filtros opcionales por usuario
+            if user_ids:
+                try:
+                    ids = [int(x) for x in user_ids]
+                    if ids:
+                        query = query.filter(Annotation.user_id.in_(ids))
+                except Exception:
+                    pass
+            elif usernames:
+                if usernames:
+                    query = query.filter(User.username.in_(usernames))
+
+            quality_data = query.order_by(Annotation.updated_at.desc()).all()
             # Crear lista de resultados
             results = []
             for annotation, image, user, admin_text, admin_status, admin_annotation_id, admin_updated_at in quality_data:
@@ -943,7 +991,6 @@ class DatabaseService:
             
             logger.info(f"Control de calidad: encontradas {len(results)} discrepancias")
             return results
-            
         except Exception as e:
             logger.error(f"Error obteniendo datos de control de calidad: {e}")
             return []

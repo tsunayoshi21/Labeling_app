@@ -322,6 +322,47 @@ def update_annotation(annotation_id):
         logger.error(f"Error interno actualizando anotación {annotation_id}: {e}")
         return jsonify({'error': 'Failed to update annotation'}), 500
 
+@api_bp.route('/admin/annotations/<int:annotation_id>', methods=['PUT'])
+@admin_required
+@validate_json_input(required_fields=['status'], optional_fields=['corrected_text'])
+def admin_update_annotation(annotation_id):
+    """Permite a un admin actualizar una anotación (estado y texto)"""
+    data = request.get_json()
+    admin_username = request.current_user['username']
+
+    try:
+        status = data['status']
+        corrected_text = data.get('corrected_text')
+
+        logger.info(f"[ADMIN] Actualizando anotación {annotation_id} por {admin_username}: status={status}")
+
+        # Validar entrada
+        if corrected_text:
+            corrected_text = security.validate_input(corrected_text, max_length=2000)
+
+        # Validar estado permitido
+        valid_statuses = ['pending', 'corrected', 'approved', 'discarded']
+        if status not in valid_statuses:
+            logger.warning(f"[ADMIN] Estado inválido para anotación {annotation_id}: {status}")
+            return jsonify({'error': f'Invalid status. Must be one of: {valid_statuses}'}), 400
+
+        # Ejecutar actualización sin filtrar por usuario
+        success = db_service.admin_update_annotation(annotation_id, status, corrected_text)
+
+        if success:
+            logger.info(f"[ADMIN] Anotación {annotation_id} actualizada exitosamente a {status} por {admin_username}")
+            return jsonify({'success': True, 'message': f'Annotation {status}'})
+        else:
+            logger.warning(f"[ADMIN] Fallo actualizando anotación {annotation_id}: no encontrada")
+            return jsonify({'error': 'Annotation not found'}), 404
+
+    except ValueError as e:
+        logger.warning(f"[ADMIN] Error de validación actualizando anotación {annotation_id}: {e}")
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        logger.error(f"[ADMIN] Error interno actualizando anotación {annotation_id}: {e}")
+        return jsonify({'error': 'Failed to update annotation'}), 500
+
 @api_bp.route('/annotations/<int:annotation_id>', methods=['GET'])
 @jwt_required
 def get_annotation(annotation_id):
@@ -400,9 +441,9 @@ def create_auto_assignments():
         logger.info(f"Admin {admin_username} creando {count} asignaciones automáticas" + 
                    (f" para usuario {user_id}" if user_id else ""))
         
-        if count <= 0 or count > 1000:  # Límite de seguridad
+        if count <= 0 or count > 50000:  # Límite de seguridad
             logger.warning(f"Admin {admin_username} intentó crear {count} asignaciones (fuera de rango)")
-            return jsonify({'error': 'Count must be between 1 and 1000'}), 400
+            return jsonify({'error': 'Count must be between 1 and 50000'}), 400
         
         assignments = db_service.assign_random_tasks(user_id, count, priority_unannotated)
         
@@ -758,8 +799,20 @@ def get_quality_control_annotations():
     admin_username = request.current_user['username']
     
     logger.debug(f"Admin {admin_username} solicitando datos de control de calidad")
-    
-    quality_data = db_service.get_quality_control_annotations()
+    # Filtros opcionales: user_ids (csv) o usernames (csv)
+    raw_user_ids = request.args.get('user_ids')
+    raw_usernames = request.args.get('usernames')
+    user_ids = None
+    usernames = None
+    if raw_user_ids:
+        try:
+            user_ids = [int(x) for x in raw_user_ids.split(',') if x.strip()]
+        except Exception:
+            user_ids = None
+    if raw_usernames:
+        usernames = [x.strip() for x in raw_usernames.split(',') if x.strip()]
+
+    quality_data = db_service.get_quality_control_annotations(user_ids=user_ids, usernames=usernames)
     
     logger.debug(f"Admin {admin_username} obtuvo {len(quality_data)} discrepancias para control de calidad")
     

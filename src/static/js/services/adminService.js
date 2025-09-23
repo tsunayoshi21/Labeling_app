@@ -33,8 +33,24 @@ export const adminService = {
   // stats and activity
   generalStats() { return http(`${API_BASE}/stats`); },
   recentActivity(limit = 6) { return http(`${API_BASE}/recent-activity?limit=${limit}`); },
-  qualityControl() { return http(`${API_BASE}/quality-control`); },
+  qualityControl(filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.user_ids) {
+      const ids = Array.isArray(filters.user_ids) ? filters.user_ids : String(filters.user_ids).split(',');
+      if (ids.length) params.set('user_ids', ids.join(','));
+    }
+    if (filters.usernames) {
+      const names = Array.isArray(filters.usernames) ? filters.usernames : String(filters.usernames).split(',');
+      if (names.length) params.set('usernames', names.join(','));
+    }
+    const qs = params.toString();
+    return http(`${API_BASE}/quality-control${qs ? `?${qs}` : ''}`);
+  },
   consolidateQuality({ user_annotation_id, admin_annotation_id }) {
     return http(`${API_BASE}/quality-control/consolidate`, { method: 'POST', body: JSON.stringify({ user_annotation_id, admin_annotation_id }) });
+  },
+  // admin annotations
+  updateAnnotation(annotation_id, { status, corrected_text }) {
+    return http(`${API_BASE}/annotations/${annotation_id}`, { method: 'PUT', body: JSON.stringify({ status, corrected_text }) });
   }
 };

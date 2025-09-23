@@ -125,8 +125,8 @@ export class AdminController {
   }
 
   // ============== QUALITY CONTROL ==============
-  async loadQualityControl(){
-    const data = await adminService.qualityControl();
+  async loadQualityControl(filters){
+    const data = await adminService.qualityControl(filters);
     this.quality = data.quality_control_data || [];
     this.ui.updateQualityControl?.(this.quality);
   }
@@ -301,16 +301,26 @@ export const defaultAdminUI = {
     list.innerHTML = items.map(it=>{
       const userTxt = encodeURIComponent(it.user_annotation_text||'');
       const adminTxt = encodeURIComponent(it.admin_annotation_text||'');
+      const encUser = encodeURIComponent(it.username||'');
+      const encPath = encodeURIComponent(it.image_path||'');
+      const encOcr = encodeURIComponent(it.initial_ocr_text||'');
       return `<div class="quality-item" data-quality-id="${it.annotation_id}" style="border:1px solid #e1e5e9;border-radius:8px;padding:1rem;margin-bottom:.75rem;background:#fff;">
       <div style="display:grid;grid-template-columns:1fr 2fr 1fr;gap:1rem;align-items:start;">
-        <div><h4>📷 Img ${it.image_id}<\/h4><p style=\"font-size:.75rem;color:#555;\">${it.image_path.slice(-50)}<\/p><button class=\"btn btn-secondary btn-sm\" data-action=\"qc-view-image\" data-path=\"${encodeURIComponent(it.image_path)}\" data-ocr=\"${encodeURIComponent(it.initial_ocr_text||'')}\">👁️ Ver Imagen<\/button></div>
+        <div><h4>📷 Img ${it.image_id}<\/h4><p style=\"font-size:.75rem;color:#555;\"><strong>Anotación ID:<\/strong> ${it.annotation_id}<\/p><button class=\"btn btn-secondary btn-sm\" data-action=\"qc-view-image\" data-path=\"${encodeURIComponent(it.image_path)}\" data-ocr=\"${encodeURIComponent(it.initial_ocr_text||'')}\">👁️ Ver Imagen<\/button><\/div>
         <div style=\"display:grid;grid-template-columns:1fr 1fr;gap:.75rem;\">
           <div><h5 style=\"margin:.25rem 0;color:#28a745;\">👤 ${it.username}<\/h5><div style=\"background:#f8f9fa;padding:.5rem;border-left:4px solid #28a745;font-family:monospace;max-height:120px;overflow:auto;\">${it.user_annotation_text||'N/A'}<\/div><small class=\"status-badge status-${it.user_status}\">${it.user_status}<\/small></div>
-          <div><h5 style=\"margin:.25rem 0;color:#dc3545;\">👨‍💼 Admin<\/h5><div style=\"background:#f8f9fa;padding:.5rem;border-left:4px solid #dc3545;font-family:monospace;max-height:120px;overflow:auto;\">${it.admin_annotation_text||'N/A'}<\/div><small class=\"status-badge status-${it.admin_status}\">${it.admin_status}<\/small></div>
+            <div><h5 style=\"margin:.25rem 0;color:#dc3545;\">👨‍💼 Admin<\/h5><div style=\"background:#f8f9fa;padding:.5rem;border-left:4px solid #dc3545;font-family:monospace;max-height:120px;overflow:auto;\">${it.admin_annotation_text||'N/A'}<\/div><small class=\"status-badge status-${it.admin_status}\">${it.admin_status}<\/small><small style=\"display:block;font-size:.7rem;color:#6c757d;margin-top:.25rem;\">ID admin: ${it.admin_annotation_id}<\/small><\/div>
         </div>
         <div style=\"text-align:center;display:flex;flex-direction:column;gap:.5rem;\">
           <button class=\"btn btn-success btn-sm\" data-action=\"qc-consolidate\" data-user-annotation=\"${it.annotation_id}\" data-admin-annotation=\"${it.admin_annotation_id}\">✅ Consolidar<\/button>
-          <button class=\"btn btn-secondary btn-sm\" data-action=\"qc-compare\" data-user-text=\"${userTxt}\" data-admin-text=\"${adminTxt}\">🔍 Comparar<\/button>
+          <button class=\"btn btn-secondary btn-sm\" data-action=\"qc-compare\"
+            data-user-text=\"${userTxt}\"
+            data-admin-text=\"${adminTxt}\"
+            data-image-id=\"${it.image_id}\"
+            data-username=\"${encUser}\"
+            data-image-path=\"${encPath}\"
+            data-ocr=\"${encOcr}\"
+          >🔍 Comparar<\/button>
         </div>
       <\/div>
     <\/div>`;}).join('');

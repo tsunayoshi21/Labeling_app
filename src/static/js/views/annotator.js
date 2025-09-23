@@ -12,8 +12,8 @@ window.ModAPI = { JWT, taskService, statsService, authService };
 
 // Estado de zoom
 let zoomFactor = 1;
-const ZOOM_MIN = 0.5;
-const ZOOM_MAX = 4;
+const ZOOM_MIN = 0.1;
+const ZOOM_MAX = 1.5;
 const ZOOM_STEP = 0.15;
 let zoomHideTimer = null;
 function showZoomOverlay(){
@@ -119,6 +119,18 @@ const uiAdapter = {
     const nextBtn = document.getElementById('nextBtn');
     if (prevBtn) prevBtn.disabled = !state.canPrev;
     if (nextBtn) nextBtn.disabled = !state.canNext;
+    // Disable "Correcta" button while browsing history
+    const correctBtn = document.getElementById('correctBtn');
+    if (correctBtn) {
+      const inHistory = typeof state.historyIndex === 'number' && state.historyIndex >= 0;
+      correctBtn.disabled = inHistory;
+      correctBtn.style.opacity = inHistory ? '0.6' : '1';
+      if (inHistory) {
+        correctBtn.title = 'En modo historial no puedes apretar este boton, puedes editar si lo deseas';
+      } else {
+        correctBtn.removeAttribute('title');
+      }
+    }
   },
   enterEditMode(text) {
     const display = document.getElementById('transcriptionDisplay');
@@ -235,7 +247,17 @@ const uiAdapter = {
     }
     if (e.key === 'ArrowLeft') window.modAnnotatorController.navigatePrev();
     else if (e.key === 'ArrowRight') window.modAnnotatorController.navigateNext();
-    else if (e.key === '1' || (e.code === 'Space' && !e.shiftKey && !e.ctrlKey && !e.altKey)) { e.preventDefault(); window.modAnnotatorController.approveCurrent(); }
+    else if (e.key === '1' || (e.code === 'Space' && !e.shiftKey && !e.ctrlKey && !e.altKey)) {
+      // Bloquear atajo de aprobar en modo historial
+      const inHistory = window.modAnnotatorController && window.modAnnotatorController.historyIndex >= 0;
+      if (inHistory) {
+        e.preventDefault();
+        Toast.show('En modo historial no puedes apretar este boton, puedes editar si lo deseas', { type: 'info' });
+        return;
+      }
+      e.preventDefault();
+      window.modAnnotatorController.approveCurrent();
+    }
     else if (e.key === '2' || e.key === 'e' || e.key === 'E') { e.preventDefault(); window.modAnnotatorController.startEdit(); }
     else if (e.key === '3' || e.key === 'Delete') { window.modAnnotatorController.discardCurrent(); }
     else if (e.key === 'l' || e.key === 'L') { doLogout(); }
