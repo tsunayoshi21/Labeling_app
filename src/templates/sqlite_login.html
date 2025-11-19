@@ -4,161 +4,56 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Anotación Colaborativa</title>
+    <link rel="icon" href="{{ url_for('static', filename='icons/ocr-icon-square-gradient.svg') }}" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="{{ url_for('static', filename='icons/ocr-icon-dark.svg') }}" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+    <link rel="icon" href="{{ url_for('static', filename='icons/ocr-icon-square-gradient.svg') }}" type="image/svg+xml">
+    <!-- Critical minimal CSS -->
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .login-container {
-            background: white;
-            padding: 2rem;
-            border-radius: 10px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-            width: 100%;
-            max-width: 400px;
-        }
-        
-        .login-header {
-            text-align: center;
-            margin-bottom: 2rem;
-        }
-        
-        .login-header h1 {
-            color: #333;
-            margin-bottom: 0.5rem;
-        }
-        
-        .login-header p {
-            color: #666;
-            font-size: 0.9rem;
-        }
-        
-        .form-group {
-            margin-bottom: 1rem;
-        }
-        
-        .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            color: #333;
-            font-weight: 500;
-        }
-        
-        .form-group input {
-            width: 100%;
-            padding: 0.75rem;
-            border: 2px solid #e1e5e9;
-            border-radius: 5px;
-            font-size: 1rem;
-            transition: border-color 0.3s;
-        }
-        
-        .form-group input:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-        
-        .login-btn {
-            width: 100%;
-            padding: 0.75rem;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 5px;
-            font-size: 1rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: transform 0.2s;
-        }
-        
-        .login-btn:hover {
-            transform: translateY(-1px);
-        }
-        
-        .login-btn:disabled {
-            opacity: 0.7;
-            cursor: not-allowed;
-            transform: none;
-        }
-        
-        .error-message {
-            background: #fee;
-            color: #c33;
-            padding: 0.75rem;
-            border-radius: 5px;
-            margin-bottom: 1rem;
-            border: 1px solid #fcc;
-            display: none;
-        }
-        
-        .success-message {
-            background: #efe;
-            color: #3c3;
-            padding: 0.75rem;
-            border-radius: 5px;
-            margin-bottom: 1rem;
-            border: 1px solid #cfc;
-            display: none;
-        }
-        
-        .demo-credentials {
-            margin-top: 1.5rem;
-            padding: 1rem;
-            background: #f8f9fa;
-            border-radius: 5px;
-            font-size: 0.85rem;
-        }
-        
-        .demo-credentials h4 {
-            color: #333;
-            margin-bottom: 0.5rem;
-        }
-        
-        .demo-credentials div {
-            margin-bottom: 0.25rem;
-            color: #666;
-        }
+      :root{--font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;--color-bg-gradient-start:#667eea;--color-bg-gradient-end:#764ba2;--color-primary:#667eea;--footer-height:64px}
+      *{box-sizing:border-box;margin:0;padding:0}
+      body{font-family:var(--font-family);background:linear-gradient(135deg,var(--color-bg-gradient-start),var(--color-bg-gradient-end));min-height:100vh;display:flex;flex-direction:column;padding-bottom:var(--footer-height)}
+      body.preload *{transition:none!important;animation:none!important}
+      .page{flex:1;display:flex;align-items:center;justify-content:center;padding:1rem}
+      .login-container{background:#fff;padding:2rem;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.15);width:100%;max-width:400px}
+      .login-header{text-align:center;margin-bottom:1.5rem}
+      .login-header h1{margin:0 0 .5rem;font-size:1.5rem;font-weight:600;color:#333}
+      .login-btn{width:100%;padding:.75rem;margin-top:.5rem;background:linear-gradient(135deg,var(--color-bg-gradient-start),var(--color-bg-gradient-end));color:#fff;border:none;border-radius:6px;font-size:1rem;font-weight:500;cursor:pointer}
+      /* Footer fixed bluish */
+      .app-footer{position:fixed;left:0;right:0;bottom:0;min-height:var(--footer-height);padding:.75rem 1rem;background:linear-gradient(135deg,#4f6eea,#5a67d8);color:#fff;font-size:.85rem;text-align:center;box-shadow:0 -6px 14px rgba(0,0,0,.08);z-index:1000}
     </style>
+    <!-- Preload login bundle CSS -->
+    <link rel="preload" href="{{ url_for('static', filename='css/login.bundle.css') }}" as="style" onload="this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="{{ url_for('static', filename='css/login.bundle.css') }}"></noscript>
 </head>
-<body>
-    <div class="login-container">
-        <div class="login-header">
-            <h1>🔐 Iniciar Sesión</h1>
-            <p>Sistema de Anotación Colaborativa</p>
+<body class="login-view preload">
+    <main class="page">
+        <div class="login-container">
+            <div class="login-header">
+                <h1>🔐 Iniciar Sesión</h1>
+                <p>Sistema de Anotación Colaborativa</p>
+            </div>
+            
+            <div id="error-message" class="error-message"></div>
+            <div id="success-message" class="success-message"></div>
+            
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="username">Usuario:</label>
+                    <input type="text" id="username" name="username" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Contraseña:</label>
+                    <input type="password" id="password" name="password" required>
+                </div>
+                
+                <button type="submit" class="login-btn" id="login-btn">Iniciar Sesión</button>
+            </form>
         </div>
-        
-        <div id="error-message" class="error-message"></div>
-        <div id="success-message" class="success-message"></div>
-        
-        <form id="login-form">
-            <div class="form-group">
-                <label for="username">Usuario:</label>
-                <input type="text" id="username" name="username" required>
-            </div>
-            
-            <div class="form-group">
-                <label for="password">Contraseña:</label>
-                <input type="password" id="password" name="password" required>
-            </div>
-            
-            <button type="submit" class="login-btn" id="login-btn">
-                Iniciar Sesión
-            </button>
-        </form>
-    </div>
-
-    <!-- JavaScript externo para funcionalidad de login -->
-    <script src="{{ url_for('static', filename='js/sqlite_login.js') }}"></script>
+    </main>
+    <footer class="app-footer" role="contentinfo">© 2025 · Corrector de Transcripciones OCR · Cristobal Vasquez</footer>
+    <script>window.addEventListener('load',()=>document.body.classList.remove('preload'));</script>
+    <!-- ES Module entrypoint for Login view -->
+    <script type="module" src="{{ url_for('static', filename='js/views/login.js') }}"></script>
 </body>
 </html>

@@ -1,0 +1,5 @@
+services:
+  cloudflare:
+    container_name: cloud_flare
+    image: cloudflare/cloudflared:latest
+    command: ["tunnel","--no-autoupdate","run","--token","your_token_here"]

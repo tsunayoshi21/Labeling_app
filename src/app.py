@@ -99,6 +99,16 @@ def create_app():
         logger.info(f"Acceso concedido a panel admin para usuario {user.get('username')}")
         return render_template('sqlite_admin.html')
     
+    @app.route('/favicon.ico')
+    def favicon():
+        """Serve favicon to avoid 404s"""
+        try:
+            return send_from_directory(os.path.join(app.root_path, 'static', 'icons'), 'favicon.svg', mimetype='image/svg+xml')
+        except Exception:
+            # Fallback: 204 No Content to avoid log noise if file missing
+            from flask import Response
+            return Response(status=204)
+
     @app.route('/images/<filename>')
     def serve_image(filename):
         """Servir imágenes"""

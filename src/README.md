@@ -137,10 +137,20 @@ Labeling_app/
 │   │   └── sqlite_login.html   # Página de login
 │   ├── static/
 │   │   ├── js/
-│   │   │   ├── sqlite_app.js   # Lógica de anotación
-│   │   │   └── sqlite_admin.js # Lógica de admin
+│   │   │   ├── core/                # Config, JWT, HTTP helpers (ES Modules)
+│   │   │   ├── services/            # Lógica de acceso a API
+│   │   │   ├── controllers/         # Coordinan vista + servicios
+│   │   │   ├── components/          # UI reutilizable (modals, tabs, toast, etc.)
+│   │   │   └── views/               # Entrypoints por vista (login.js, annotator.js, admin.js)
 │   │   └── css/
-│   │       └── styles.css      # Estilos globales
+│   │       ├── base.css             # Tokens + utilidades compartidas
+│   │       ├── annotator.css        # Estilos específicos (no críticos)
+│   │       ├── admin_mod.css        # Estilos específicos admin
+│   │       ├── login.css            # Estilos específicos login
+│   │       ├── annotator.bundle.css # Base + annotator (minificado, precargado)
+│   │       ├── admin.bundle.css     # Base + admin (minificado, precargado)
+│   │       ├── login.bundle.css     # Base + login (minificado, precargado)
+│   │       └── styles.css           # (LEGACY VACÍO) – mantenido solo para evitar 404 temporales
 │
 ├── 📊 Base de Datos
 │   └── labeling_app.db         # SQLite (se crea automáticamente)
@@ -204,3 +214,10 @@ Este proyecto está bajo la **Licencia MIT** - ver [LICENSE](LICENSE) para detal
 **¿Necesitas ayuda?** Abre un [issue](https://github.com/tuusuario/labeling-app/issues) o contacta al desarrollador.
 
 **⭐ ¿Te gusta el proyecto?** ¡Dale una estrella en GitHub!
+
+## 🧩 Notas sobre Optimización Frontend Reciente
+- Migración completa a ES Modules (sin funciones globales inline).
+- CSS crítico inline + preload asíncrono de bundles (admin, annotator, login) para reducir FOUC.
+- Bundles minificados combinan base + vista específica.
+- `styles.css` deprecado y vaciado (se puede eliminar tras validar cachés).
+- Clases en `<body>`: `admin-view`, `annotator-view`, `login-view` para scoping.

@@ -7,7 +7,7 @@ bind = f"{os.getenv('HOST', '0.0.0.0')}:{os.getenv('PORT', '8080')}"
 backlog = 2048
 
 # Workers - configuración más conservadora
-workers = int(os.getenv('WORKERS', min(multiprocessing.cpu_count() * 2 + 1, 8)))  # Máximo 8 workers
+workers = int(os.getenv('WORKERS', min(multiprocessing.cpu_count() * 2 + 1, 16)))  # Máximo 8 workers
 worker_class = "sync"
 worker_connections = 1000
 timeout = 120

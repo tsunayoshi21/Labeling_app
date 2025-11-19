@@ -51,3 +51,4 @@ nohup.out
 *.temp
 ngrok
 *.env
+backups/
