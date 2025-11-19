@@ -51,7 +51,13 @@
         <div id="overview-tab" class="tab-content active" aria-hidden="false">
             <h2>Estadísticas Generales</h2>
             <div class="stats-grid" id="general-stats"></div>
-            <div class="section-header"><h3>Actividad Reciente</h3></div>
+            <div class="section-header">
+                <h3>Actividad Reciente</h3>
+                <button class="btn btn-primary" data-action="export-database" style="display: flex; align-items: center; gap: 0.5rem;">
+                    <span>📥</span>
+                    <span>Exportar Base de Datos</span>
+                </button>
+            </div>
             <div id="recent-activity"></div>
         </div>
         <div id="assignments-tab" class="tab-content" aria-hidden="true">
@@ -92,7 +98,14 @@
                 </div>
                 <div class="user-search"><input id="user-search" type="text" placeholder="🔍 Buscar usuario..." aria-label="Buscar usuario"></div>
             </div>
-            <table class="table users-table-modern" id="users-table"><thead><tr><th>ID</th><th>Usuario</th><th>Rol</th><th>Agreement c/ Admin</th><th>Acciones</th></tr></thead><tbody></tbody></table>
+            <table class="table users-table-modern" id="users-table"><thead><tr>
+                <th scope="col" data-sort="id">ID</th>
+                <th scope="col" data-sort="username">Usuario</th>
+                <th scope="col">Rol</th>
+                <th scope="col" data-sort="agreement">Agreement c/ Admin</th>
+                <th scope="col" data-sort="comparisons">Comparaciones</th>
+                <th scope="col">Acciones</th>
+            </tr></thead><tbody></tbody></table>
         </div>
                 <div id="quality-tab" class="tab-content" aria-hidden="true">
                                     <div class="section-header">

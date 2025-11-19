@@ -52,5 +52,10 @@ export const adminService = {
   // admin annotations
   updateAnnotation(annotation_id, { status, corrected_text }) {
     return http(`${API_BASE}/annotations/${annotation_id}`, { method: 'PUT', body: JSON.stringify({ status, corrected_text }) });
+  },
+  
+  // export
+  exportAnnotations() {
+    return http(`${API_BASE}/export/annotations`);
   }
 };

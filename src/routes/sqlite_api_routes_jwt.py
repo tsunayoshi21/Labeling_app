@@ -1080,3 +1080,47 @@ def get_notification_config():
     except Exception as e:
         logger.error(f"Error obteniendo configuración de notificaciones: {e}")
         return jsonify({'error': 'Error interno del servidor'}), 500
+
+@api_bp.route('/admin/export/annotations', methods=['GET'])
+@admin_required
+def export_annotations():
+    """Exporta las anotaciones agrupadas por imagen y usuario
+    
+    Returns:
+        JSON con estructura:
+        {
+            "image_id_1": {
+                "username1": "texto_corregido1",
+                "username2": "texto_corregido2"
+            },
+            "image_id_2": {...}
+        }
+    """
+    admin_username = request.current_user['username']
+    
+    logger.info(f"Admin {admin_username} solicitando exportación de anotaciones")
+    
+    try:
+        # Obtener datos exportados
+        exported_data = db_service.export_annotations_by_image()
+        
+        # Calcular estadísticas de exportación
+        total_images = len(exported_data)
+        total_annotations = sum(len(users) for users in exported_data.values())
+        
+        logger.info(f"Admin {admin_username} exportó {total_annotations} anotaciones de {total_images} imágenes")
+        
+        return jsonify({
+            'success': True,
+            'data': exported_data,
+            'metadata': {
+                'total_images': total_images,
+                'total_annotations': total_annotations,
+                'export_date': datetime.now().isoformat(),
+                'exported_by': admin_username
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error exportando anotaciones para admin {admin_username}: {e}")
+        return jsonify({'error': 'Error interno del servidor'}), 500

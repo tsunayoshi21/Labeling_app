@@ -309,10 +309,10 @@ class DatabaseService:
             session.close()
 
     def assign_random_tasks(self, user_id: int, count: int, priority_unannotated: bool = True) -> int:
-        """Asigna N tareas random a un usuario"""
+        """Asigna N tareas random a un usuario - Versión optimizada"""
         session = self.get_session()
         try:
-            from sqlalchemy import func, text
+            from sqlalchemy import func, exists, and_, or_
             
             # Verificar que el usuario existe
             user = session.query(User).filter_by(id=user_id).first()
@@ -322,42 +322,58 @@ class DatabaseService:
             assignments_created = 0
             
             if priority_unannotated:
-
-                # Subconsulta: todos los image_id que están en Annotation, excepto los del admin con status 'pending'
-                excluded_image_ids = session.query(Annotation.image_id).filter(
-                    ~((Annotation.user_id == 1) & (Annotation.status == 'pending'))
+                # Usar NOT EXISTS en lugar de NOT IN para mejor rendimiento
+                # Buscar imágenes que NO tienen ninguna anotación (excepto admin pending)
+                not_annotated_subquery = ~exists().where(
+                    and_(
+                        Annotation.image_id == Image.id,
+                        or_(
+                            Annotation.user_id != 1,  # Cualquier usuario que no sea admin
+                            and_(
+                                Annotation.user_id == 1,
+                                Annotation.status != 'pending'  # O admin con status diferente a pending
+                            )
+                        )
+                    )
                 )
-
-                # Consulta principal: dame solo imágenes cuyo id NO está en la subconsulta anterior
+                
                 available_images = session.query(Image).filter(
-                    ~Image.id.in_(excluded_image_ids)
+                    not_annotated_subquery
                 ).order_by(func.random()).limit(count).all()
-
                 
             else:
-                # Subconsulta: IDs de imágenes que el usuario actual ya tiene asignadas
-                user_image_ids = session.query(Annotation.image_id).filter(
-                    Annotation.user_id == user_id
+                # Buscar imágenes que:
+                # 1. El admin YA anotó (status != pending)
+                # 2. El usuario actual NO tiene
+                admin_annotated_subquery = exists().where(
+                    and_(
+                        Annotation.image_id == Image.id,
+                        Annotation.user_id == 1,
+                        Annotation.status != 'pending'
+                    )
                 )
-
-                # Subconsulta: IDs de imágenes que el admin ha anotado con estado distinto a 'pending'
-                admin_image_ids = session.query(Annotation.image_id).filter(
-                    (Annotation.user_id == 1) & (Annotation.status != 'pending')
+                
+                user_not_has_subquery = ~exists().where(
+                    and_(
+                        Annotation.image_id == Image.id,
+                        Annotation.user_id == user_id
+                    )
                 )
-
-                # Consulta final: imágenes que están en la lista del admin, pero NO en la del usuario actual
+                
                 available_images = session.query(Image).filter(
-                    Image.id.in_(admin_image_ids),
-                    ~Image.id.in_(user_image_ids)
+                    admin_annotated_subquery,
+                    user_not_has_subquery
                 ).order_by(func.random()).limit(count).all()
             
-            # Crear las asignaciones
+            # Optimización: hacer un bulk insert en lugar de insertar uno por uno
+            new_annotations = []
             for image in available_images:
-                # Verificar que no exista ya la asignación
-                existing = session.query(Annotation).filter_by(
+                # Usar get() en lugar de filter_by().first() es más rápido
+                # pero necesitamos verificar por ambas claves
+                existing = session.query(Annotation.id).filter_by(
                     user_id=user_id,
                     image_id=image.id
-                ).first()
+                ).scalar()
                 
                 if not existing:
                     annotation = Annotation()
@@ -365,8 +381,12 @@ class DatabaseService:
                     annotation.image_id = image.id
                     annotation.status = 'pending'
                     annotation.updated_at = datetime.now(timezone.utc)
-                    session.add(annotation)
+                    new_annotations.append(annotation)
                     assignments_created += 1
+            
+            # Bulk insert si hay anotaciones nuevas
+            if new_annotations:
+                session.bulk_save_objects(new_annotations)
             
             session.commit()
             return assignments_created
@@ -1224,6 +1244,60 @@ class DatabaseService:
             
         except Exception as e:
             logger.error(f"Error calculando agreement stats: {e}")
+            return {}
+        finally:
+            session.close()
+
+    def export_annotations_by_image(self) -> dict:
+        """Exporta todas las anotaciones agrupadas por image_id con username como clave
+        
+        Estructura de retorno:
+        {
+            "image_id_1": {
+                "username1": "texto_corregido1",
+                "username2": "texto_corregido2",
+                ...
+            },
+            "image_id_2": {
+                ...
+            }
+        }
+        """
+        session = self.get_session()
+        try:
+            # Query optimizada: obtener todas las anotaciones con username en una sola consulta
+            annotations = session.query(
+                Annotation.image_id,
+                User.username,
+                Annotation.corrected_text,
+                Annotation.status
+            ).join(
+                User, Annotation.user_id == User.id
+            ).filter(
+                Annotation.status.in_(['corrected', 'approved', 'discarded'])  # Solo exportar anotaciones completadas
+            ).order_by(
+                Annotation.image_id,
+                User.username
+            ).all()
+            
+            # Agrupar por image_id
+            result = {}
+            for image_id, username, corrected_text, status in annotations:
+                # formatear nombre a muchos 0s a la izquierda
+                # img_00000000001
+                image_key = f"img_{image_id:0>11}"
+                
+                if image_key not in result:
+                    result[image_key] = {}
+                
+                # Usar el texto corregido, o vacío si es None
+                result[image_key][username] = corrected_text if corrected_text else "NULL"
+            
+            logger.info(f"Exportadas anotaciones de {len(result)} imágenes")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error exportando anotaciones: {e}")
             return {}
         finally:
             session.close()

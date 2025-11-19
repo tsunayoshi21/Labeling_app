@@ -53,6 +53,37 @@ window.ModAPI = { ...(window.ModAPI||{}), JWT, adminService, authService };
       switch(act) {
         case 'logout': e.preventDefault(); await window.adminController.logout(); break;
         case 'go-annotator': window.location.href='/'; break;
+        case 'export-database': {
+          e.preventDefault();
+          try {
+            ui.toast?.('Generando exportación...');
+            const response = await adminService.exportAnnotations();
+            
+            if (response.success && response.data) {
+              // Crear archivo JSON para descargar
+              const jsonStr = JSON.stringify(response.data, null, 2);
+              const blob = new Blob([jsonStr], { type: 'application/json' });
+              const url = URL.createObjectURL(blob);
+              
+              // Crear elemento de descarga temporal
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `annotations_export_${new Date().toISOString().split('T')[0]}.json`;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              URL.revokeObjectURL(url);
+              
+              ui.toast?.(`✅ Exportadas ${response.metadata.total_annotations} anotaciones de ${response.metadata.total_images} imágenes`);
+            } else {
+              ui.showError?.('Error al exportar datos');
+            }
+          } catch(err) {
+            console.error('Error exportando base de datos:', err);
+            ui.showError?.('Error al exportar la base de datos');
+          }
+          break;
+        }
         case 'open-create-user': {
           const modal = ensureCreateUserModal(ui);
           modal.style.display='block';
@@ -141,13 +172,7 @@ window.ModAPI = { ...(window.ModAPI||{}), JWT, adminService, authService };
   // User search filter & counters
   const userSearch = document.getElementById('user-search');
   if(userSearch){
-    userSearch.addEventListener('input', ()=>{
-      const q = userSearch.value.trim().toLowerCase();
-      document.querySelectorAll('#users-table tbody tr').forEach(tr=>{
-        const name = tr.children[1]?.textContent.toLowerCase()||'';
-        tr.style.display = !q || name.includes(q) ? '' : 'none';
-      });
-    });
+    userSearch.addEventListener('input', ()=>{ applyUserFilters(); });
   }
 
   const updateUserCounters = ()=>{
@@ -181,8 +206,41 @@ window.ModAPI = { ...(window.ModAPI||{}), JWT, adminService, authService };
     chip.classList.add('active');
     applyUserFilters();
   });
-  if(document.getElementById('user-search')) document.getElementById('user-search').addEventListener('input', applyUserFilters);
   document.addEventListener('users:updated', applyUserFilters);
+
+  const usersTableHead = document.querySelector('#users-table thead');
+  const updateSortIndicators = ()=>{
+    if(!usersTableHead) return;
+    const sort = window.adminController?.userSort;
+    usersTableHead.querySelectorAll('th[data-sort]').forEach(th=>{
+      const isActive = sort && th.dataset.sort === sort.field;
+      th.classList.toggle('is-sorted', !!isActive);
+      if(isActive){
+        th.dataset.direction = sort.direction;
+        th.setAttribute('aria-sort', sort.direction === 'desc' ? 'descending' : 'ascending');
+      } else {
+        th.removeAttribute('data-direction');
+        th.setAttribute('aria-sort', 'none');
+      }
+    });
+  };
+
+  if(usersTableHead){
+    usersTableHead.querySelectorAll('th[data-sort]').forEach(th=>{
+      if(!th.hasAttribute('aria-sort')) th.setAttribute('aria-sort','none');
+    });
+    usersTableHead.addEventListener('click', e=>{
+      const th = e.target.closest('th[data-sort]');
+      if(!th) return;
+      const field = th.dataset.sort;
+      window.adminController?.sortUsers?.(field);
+      updateSortIndicators();
+      applyUserFilters();
+    });
+  }
+
+  document.addEventListener('users:updated', updateSortIndicators);
+  updateSortIndicators();
 
   const refreshAssignmentQuickStats = ()=>{
     const stats = window.adminController?.stats; if(!stats) return;

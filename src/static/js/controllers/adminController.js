@@ -13,6 +13,7 @@ export class AdminController {
     this.activity = [];
     this.agreement = null;
     this.users = [];
+    this.userSort = { field: 'id', direction: 'asc' };
     // Eliminado: this.images (pestaña Imágenes removida)
     this.quality = [];
   }
@@ -60,7 +61,15 @@ export class AdminController {
       this.agreement = data.agreement_stats || {};
       this.ui.updateAgreement?.(this.agreement);
       // si ya tenemos usuarios, actualizar celdas
-      if (this.users.length) this.ui.updateUsersAgreement?.(this.agreement);
+      if (this.users.length) {
+        if (['agreement','comparisons'].includes(this.userSort?.field)) {
+          this.applyUserSort();
+          this.ui.updateUsers?.(this.users, this.agreement);
+          this.ui.updateAssignmentUsers?.(this.users);
+        } else {
+          this.ui.updateUsersAgreement?.(this.agreement);
+        }
+      }
     } catch (e) { console.warn('Agreement stats no disponibles aún'); }
   }
 
@@ -68,6 +77,7 @@ export class AdminController {
   async loadUsers() {
     const data = await adminService.listUsers();
     this.users = data.users || [];
+    this.applyUserSort();
     this.ui.updateUsers?.(this.users, this.agreement);
     this.ui.updateAssignmentUsers?.(this.users);
   }
@@ -81,6 +91,7 @@ export class AdminController {
   async deleteUser(userId) {
     await adminService.deleteUser(userId);
     this.users = this.users.filter(u=>u.id!==userId);
+    this.applyUserSort();
     this.ui.updateUsers?.(this.users, this.agreement);
     await this.loadStats();
     this.ui.toast?.('Usuario eliminado');
@@ -106,6 +117,56 @@ export class AdminController {
     await adminService.deleteUserAnnotation(userId, annotationId);
     await this.loadUsers();
     this.ui.toast?.('Anotación eliminada');
+  }
+
+  applyUserSort(){
+    if (!Array.isArray(this.users) || !this.users.length || !this.userSort) return;
+    const { field, direction } = this.userSort;
+    const dir = direction === 'desc' ? -1 : 1;
+    const agreementStats = this.agreement || {};
+    const compareNumbers = (a,b)=>{
+      if (a === b) return 0;
+      return a > b ? 1 : -1;
+    };
+    this.users.sort((userA, userB)=>{
+      switch(field){
+        case 'username': {
+          const nameA = (userA.username || '').toLocaleLowerCase('es-ES');
+          const nameB = (userB.username || '').toLocaleLowerCase('es-ES');
+          return nameA.localeCompare(nameB, 'es-ES') * dir;
+        }
+        case 'agreement': {
+          const pctA = agreementStats[userA.id]?.agreement_percentage ?? -1;
+          const pctB = agreementStats[userB.id]?.agreement_percentage ?? -1;
+          return compareNumbers(pctA, pctB) * dir;
+        }
+        case 'comparisons': {
+          const compA = agreementStats[userA.id]?.total_comparisons ?? -1;
+          const compB = agreementStats[userB.id]?.total_comparisons ?? -1;
+          return compareNumbers(compA, compB) * dir;
+        }
+        case 'id':
+        default: {
+          const idA = Number(userA.id) || 0;
+          const idB = Number(userB.id) || 0;
+          return compareNumbers(idA, idB) * dir;
+        }
+      }
+    });
+  }
+
+  sortUsers(field){
+    if (!field) return;
+    if (!this.userSort) this.userSort = { field: 'id', direction: 'asc' };
+    if (this.userSort.field === field) {
+      this.userSort.direction = this.userSort.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+      const defaultDir = (field === 'agreement' || field === 'comparisons') ? 'desc' : 'asc';
+      this.userSort = { field, direction: defaultDir };
+    }
+    this.applyUserSort();
+    this.ui.updateUsers?.(this.users, this.agreement);
+    this.ui.updateAssignmentUsers?.(this.users);
   }
 
   // ============== IMAGES (eliminado) ==============
@@ -240,18 +301,69 @@ export const defaultAdminUI = {
   updateUsers(users, agreementStats){
     const tbody = document.querySelector('#users-table tbody');
     if (!tbody) return;
+    // Inject styling once for agreement + comparisons + sortable headers
+    if(!document.getElementById('agreement-metric-style')){
+      const style = document.createElement('style');
+      style.id='agreement-metric-style';
+  style.textContent = `.users-table-modern thead th[data-sort]{cursor:pointer;user-select:none;position:relative;}
+.users-table-modern thead th[data-sort]:after{content:'\\25B4';opacity:0;position:absolute;right:.4rem;font-size:.65rem;transition:opacity .2s, transform .2s;}
+.users-table-modern thead th[data-sort][data-direction="desc"]:after{transform:rotate(180deg);}
+.users-table-modern thead th[data-sort].is-sorted:after{opacity:.55;}
+.users-table-modern td.agreement-cell,.users-table-modern td.comparisons-cell{text-align:center;}
+.agreement-metric{display:inline-flex;align-items:center;justify-content:center;font-size:.9rem;font-weight:700;padding:.2rem .65rem;border-radius:999px;min-width:3.1rem;letter-spacing:.3px;transition:background-color .3s,color .3s,border-color .3s;}
+.agreement-metric--low{color:#c1121f;background:rgba(220,53,69,.12);border:1px solid rgba(220,53,69,.4);}
+.agreement-metric--mid{color:#0a3d62;background:rgba(30,144,255,.12);border:1px solid rgba(30,144,255,.4);}
+.agreement-metric--high{color:#0b6b41;background:rgba(25,135,84,.15);border:1px solid rgba(25,135,84,.38);}
+.agreement-loading{font-size:.75rem;color:#777;}
+.comparisons-metric{display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:600;color:#455060;}
+@media (prefers-color-scheme: dark){
+  .agreement-metric{border-color:transparent;}
+  .agreement-metric--low{color:#ff6b81;background:rgba(220,53,69,.28);}
+  .agreement-metric--mid{color:#8abaff;background:rgba(30,144,255,.24);}
+  .agreement-metric--high{color:#8dffc2;background:rgba(25,135,84,.28);}
+  .agreement-loading{color:#9aa8ff;}
+  .comparisons-metric{color:#c5cce0;}
+}`;
+      document.head.appendChild(style);
+    }
+    const getAgreementTier = pct => {
+      if (typeof pct !== 'number' || Number.isNaN(pct)) return '';
+      if (pct > 95) return 'agreement-metric--high';
+      if (pct >= 90) return 'agreement-metric--mid';
+      return 'agreement-metric--low';
+    };
+    const renderAgreement = (u,aStats)=>{
+      if(!aStats){
+        return (u.role==='admin') ? 'N/A' : '<span class="agreement-loading" aria-label="Calculando agreement…">…<\/span>';
+      }
+      const pct = aStats.agreement_percentage;
+      const tierClass = getAgreementTier(pct);
+      return `<span class="agreement-metric ${tierClass}" aria-label="Agreement ${pct}%">${pct}%<\/span>`;
+    };
+    const renderComparisons = (u,aStats)=>{
+      if(!aStats){
+        return (u.role==='admin') ? 'N/A' : '<span class="agreement-loading" aria-label="Calculando comparaciones…">…<\/span>';
+      }
+      const total = aStats.total_comparisons;
+      const agreements = aStats.agreements;
+      return `<span class="comparisons-metric" title="Acuerdos / Comparaciones: ${agreements}/${total}" aria-label="${agreements} acuerdos de ${total}">${total}<\/span>`;
+    };
     tbody.innerHTML = users.map(u => {
       const aStats = agreementStats && agreementStats[u.id];
-      const agreementPct = aStats ? aStats.agreement_percentage : null;
-      const agreementCellText = aStats ? `${agreementPct}%` : (u.role==='admin' ? 'N/A' : '<span style="font-size:.7rem;color:#777;">...<\/span>');
+      const agreementCellText = renderAgreement(u,aStats);
+      const comparisonsCellText = renderComparisons(u,aStats);
       const agreementTitle = aStats
-        ? `Agreement: ${agreementPct}% (${aStats.agreements}/${aStats.total_comparisons})`
+        ? `Agreement: ${aStats.agreement_percentage}% (${aStats.agreements}/${aStats.total_comparisons})`
         : (u.role==='admin' ? 'Usuario admin (no aplica agreement)' : 'Calculando agreement...');
+      const comparisonsTitle = aStats
+        ? `Comparaciones totales: ${aStats.total_comparisons} (acuerdos: ${aStats.agreements})`
+        : (u.role==='admin' ? 'Usuario admin (no aplica comparaciones)' : 'Calculando comparaciones...');
       return `<tr data-user-id="${u.id}">
         <td>${u.id}<\/td>
         <td>${u.username}<\/td>
         <td><span class="status-badge ${u.role==='admin'?'status-approved':'status-pending'}">${u.role}<\/span><\/td>
         <td class="agreement-cell" data-agreement-user="${u.id}" title="${agreementTitle}" aria-label="${agreementTitle}">${agreementCellText}<\/td>
+        <td class="comparisons-cell" data-comparisons-user="${u.id}" title="${comparisonsTitle}" aria-label="${comparisonsTitle}">${comparisonsCellText}<\/td>
         <td>
           <div class="action-buttons">
             <button class="btn btn-primary btn-sm" data-action="user-stats" data-user="${u.id}">📊 Stats<\/button>
@@ -269,11 +381,25 @@ export const defaultAdminUI = {
     Object.entries(agreementStats||{}).forEach(([id, st])=>{
       const cell = document.querySelector(`[data-agreement-user="${id}"]`);
       if (cell) {
-        cell.textContent = `${st.agreement_percentage}%`;
-        const t = `Agreement: ${st.agreement_percentage}% (${st.agreements}/${st.total_comparisons})`;
+        const pct = st.agreement_percentage;
+        const t = `Agreement: ${pct}% (${st.agreements}/${st.total_comparisons})`;
+        const tierClass = (typeof pct === 'number' && !Number.isNaN(pct))
+          ? (pct > 95 ? 'agreement-metric--high' : (pct >= 90 ? 'agreement-metric--mid' : 'agreement-metric--low'))
+          : '';
+        cell.innerHTML = `<span class="agreement-metric ${tierClass}" aria-label="Agreement ${pct}%">${pct}%<\/span>`;
         cell.title = t;
         cell.setAttribute('aria-label', t);
         cell.removeAttribute('data-loading-agreement');
+      }
+      const compCell = document.querySelector(`[data-comparisons-user="${id}"]`);
+      if (compCell) {
+        const total = st.total_comparisons;
+        const agreements = st.agreements;
+        const title = `Comparaciones totales: ${total} (acuerdos: ${agreements})`;
+        compCell.innerHTML = `<span class="comparisons-metric" title="Acuerdos / Comparaciones: ${agreements}/${total}" aria-label="${agreements} acuerdos de ${total}">${total}<\/span>`;
+        compCell.title = title;
+        compCell.setAttribute('aria-label', title);
+        compCell.removeAttribute('data-loading-agreement');
       }
     });
   },
